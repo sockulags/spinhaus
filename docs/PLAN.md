@@ -3,7 +3,9 @@
 En egen träningsapp för Zwift Ride (Wahoo Kickr Core) på en Lenovo Android-platta,
 för två användare. Ersätter Zwift-prenumerationen för strukturerad träning och fri cykling.
 
-Status: **Planering** · Senast uppdaterad: 2026-11-01
+Status: **Första version byggd – testas** · Senast uppdaterad: 2026-11-01
+
+Testchecklista: [TESTING.md](TESTING.md)
 
 ---
 
@@ -47,6 +49,10 @@ Status: **Planering** · Senast uppdaterad: 2026-11-01
   (se 6.3). Det är samma princip som andra appar använder.
 - **Bara en app i taget** kan styra trainern. Zwift-appen/Companion får inte vara ansluten samtidigt.
 - **ANT+ används inte.** Allt går över Bluetooth.
+- **Zwift Ride V2 (firmware ≥ 1.3.0) är låst av Zwift.** Kontrollern döljer sin tjänst tills
+  Zwift-appen har låst upp den, och upplåsningen gäller ca 24 timmar (källa: BikeControl).
+  Spinhaus upptäcker detta, visar instruktioner och försöker igen automatiskt var 20:e sekund.
+  Alla funktioner finns även som knappar på skärmen.
 - Kontrollernas protokoll är baklängesanalyserat av communityn (t.ex.
   [RideToWoosh](https://github.com/TheInGoF/RideToWoosh), [zwiftplay](https://github.com/ajchellew/zwiftplay)).
   Vi hittar tjänster/karakteristika efter roll istället för hårdkodade UUID och loggar allt rått,
@@ -61,16 +67,16 @@ Status: **Planering** · Senast uppdaterad: 2026-11-01
 | Plattform | **Native Android-app (APK)** | Stabilast Bluetooth med 3 enheter samtidigt, skärm hålls tänd, bakgrundstjänst |
 | Språk | Kotlin | Standard för Android |
 | UI | Jetpack Compose (Material 3, mörkt tema) | Modernt, snabbt att bygga konfigurerbar dashboard |
-| Bluetooth | Android BLE API via Nordic "Android-BLE-Library" | Beprövat, hanterar köer/återanslutning |
+| Bluetooth | Android BLE API med egen operationskö (GattClient) | Inga externa beroenden, full kontroll |
 | Databas | Room (SQLite) | Lokalt, robust, migreringar |
 | Inställningar | DataStore | Små inställningar |
-| Arkitektur | MVVM + Kotlin Coroutines/Flow, Hilt för DI | Testbart, tydliga lager |
+| Arkitektur | Ren Kotlin-kärna (`core`, enhetstestad) + Android-app, Coroutines/Flow, manuell DI | Testbart, tydliga lager |
 | Grafer | Egen Compose Canvas (passprofil, live-graf, historik) | Full kontroll, lätt och snabbt |
 | Ljud | Android SoundPool + TextToSpeech (sv/en) | Pip och röst |
 | Översättning | Android string resources (`values/` + `values-sv/`) | Inbyggt |
 | Bygge | Gradle + **GitHub Actions** bygger APK automatiskt | Du behöver aldrig bygga själv |
 | Distribution | **GitHub Releases** – du laddar ner APK på plattan | Enkelt; signerad med fast nyckel så uppdateringar installeras över gamla |
-| Minsta Android | Android 10 (API 29) | Plattan är ny, så den klarar det med marginal |
+| Minsta Android | Android 12 (API 31) | Plattan är ny; enklare Bluetooth-behörigheter |
 
 ---
 
@@ -424,3 +430,6 @@ Syfte: bekräfta att allt går att prata med **innan** resten byggs.
 | 2026-11-01 | Svenska och engelska |
 | 2026-11-01 | Egen virtuell växling; metod väljs efter fas 0 |
 | 2026-11-01 | Inbyggt bibliotek med egna originalpass + import av .zwo |
+| 2026-11-01 | Fas 0 slogs ihop med resten; communityns protokoll antas stämma. Allt (fas 1–6) byggt direkt |
+| 2026-11-01 | Virtuell växling via skalning av FTMS-simulering (lutning·k, crr·k, cw·k³) |
+| 2026-11-01 | Signeringsnyckeln läggs som GitHub-hemlighet (inte i repot) så att varje version kan installeras ovanpå |

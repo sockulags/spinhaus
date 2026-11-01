@@ -1,0 +1,67 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SPINHAUS_VERSION_CODE: ${{ github.run_number }}
+      SPINHAUS_VERSION_NAME: 0.1.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Core unit tests
+        run: SPINHAUS_CORE_ONLY=1 ./gradlew :core:test --console=plain
+
+      - name: Prepare signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.SPINHAUS_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "SPINHAUS_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No signing secret – APK is signed with a temporary debug key"
+          fi
+
+      - name: Build APK
+        env:
+          SPINHAUS_KEYSTORE_PASSWORD: ${{ secrets.SPINHAUS_KEYSTORE_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --console=plain
+
+      - name: Rename APK
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/release/app-release.apk out/spinhaus-0.1.${{ github.run_number }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spinhaus-apk
+          path: out/*.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.${{ github.run_number }}
+          name: Spinhaus 0.1.${{ github.run_number }}
+          body_path: docs/RELEASE_NOTES.md
+          files: out/*.apk
+          make_latest: true

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Spinhaus</string>
+    <string name="ride_in_progress">Ride in progress</string>
+</resources>
