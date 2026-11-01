@@ -70,6 +70,8 @@ import se.spinhaus.app.ui.components.LabeledRow
 import se.spinhaus.app.ui.components.ScreenScaffold
 import se.spinhaus.app.ui.components.SectionTitle
 import se.spinhaus.app.ui.components.SpinCard
+import se.spinhaus.app.ui.components.UpdateBanner
+import se.spinhaus.app.update.UpdateState
 import se.spinhaus.app.ui.t
 import se.spinhaus.app.ui.theme.SpinColors
 import se.spinhaus.app.ui.tr
@@ -195,10 +197,26 @@ fun SettingsScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
                 LabeledRow(t("Reconnect all devices", "Återanslut alla enheter")) {
                     TextButton(onClick = { app.hub.reconnectAll() }) { Text(t("Reconnect", "Återanslut")) }
                 }
-                val version = remember {
-                    runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
+            }
+
+            SectionTitle(t("Updates", "Uppdateringar"))
+            SpinCard {
+                val upd by app.updates.state.collectAsState()
+                LabeledRow("Spinhaus ${app.updates.installedVersionName}") {
+                    TextButton(onClick = { app.updates.check(force = true) }) { Text(t("Check now", "Sök nu")) }
                 }
-                Text("Spinhaus $version", color = SpinColors.Muted, modifier = Modifier.padding(top = 8.dp))
+                Text(
+                    when (val u = upd) {
+                        is UpdateState.Checking -> t("Checking…", "Söker…")
+                        is UpdateState.UpToDate -> t("You have the latest version.", "Du har senaste versionen.")
+                        is UpdateState.Failed -> t("Could not check: ${u.message}", "Kunde inte söka: ${u.message}")
+                        is UpdateState.Available -> t("Version ${u.versionName} is available.", "Version ${u.versionName} finns.")
+                        else -> t("The app checks automatically when it starts.", "Appen söker automatiskt när den startar.")
+                    },
+                    color = SpinColors.Muted,
+                )
+                Spacer(Modifier.height(8.dp))
+                UpdateBanner(app)
             }
             Spacer(Modifier.height(32.dp))
         }

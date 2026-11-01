@@ -44,6 +44,7 @@ import se.spinhaus.app.ui.components.BigActionTile
 import se.spinhaus.app.ui.components.ScreenScaffold
 import se.spinhaus.app.ui.components.SpinCard
 import se.spinhaus.app.ui.components.StatusDot
+import se.spinhaus.app.ui.components.UpdateBanner
 import se.spinhaus.app.ui.t
 import se.spinhaus.app.ui.theme.SpinColors
 import se.spinhaus.core.workout.WorkoutCategory
@@ -102,6 +103,7 @@ fun HomeScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
                     }
                 }
             }
+            item(span = { GridItemSpan(maxLineSpan) }) { UpdateBanner(app) }
             if (session != null) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     SpinCard(color = SpinColors.Primary.copy(alpha = 0.2f)) {

@@ -37,4 +37,9 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        app.updates.check()
+    }
 }

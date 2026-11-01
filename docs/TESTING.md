@@ -7,7 +7,7 @@ exportera loggen: **Enheter → Logg → Exportera**.
 1. Öppna https://github.com/sockulags/spinhaus/releases på plattan.
 2. Ladda ner senaste `spinhaus-0.1.X.apk` och öppna filen.
 3. Första gången: tillåt "Installera okända appar" för webbläsaren.
-4. Senare versioner installeras ovanpå – historiken finns kvar.
+4. Senare versioner: appen visar "Ny version finns" på hemskärmen → Uppdatera → Installera. Historiken finns kvar.
 5. Stäng Zwift och Zwift Companion helt innan du testar.
 
 ## 1. Start och profiler
