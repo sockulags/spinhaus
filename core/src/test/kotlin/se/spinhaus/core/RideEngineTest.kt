@@ -185,3 +185,20 @@ class RideEngineTest {
         assertEquals(emptyList(), ci.onEdges(tracker.update(emptySet(), 3100), bind))
     }
 }
+
+class ErgRateLimitTest {
+    @Test
+    fun rampTargetsAreRateLimited() {
+        val w = Workout("r", "r", segments = listOf(Segment.Ramp(20, 0.5, 1.0), Segment.Steady(60, 1.0)))
+        val e = RideEngine(RideConfig(RideMode.Structured(w), ftp = 200))
+        var now = 0L
+        var sent = 0
+        repeat(40) { // 10 s at 4 Hz
+            now += 250
+            e.onPower(150, now); e.onCadence(90.0, now)
+            e.tick(now)
+            if (e.takeCommand() != null) sent++
+        }
+        assertTrue(sent in 5..12, "sent $sent commands in 10 s")
+    }
+}

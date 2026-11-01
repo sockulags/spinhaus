@@ -166,6 +166,7 @@ class RideEngine(val config: RideConfig) {
     private var desiredCommand: TrainerCommand? = null
     private var sentCommand: TrainerCommand? = null
     private var lastSimSentAt = -10.0
+    private var lastPowerSetAt = -10.0
 
     // ------------------------------------------------------------------ inputs
 
@@ -445,8 +446,15 @@ class RideEngine(val config: RideConfig) {
         if (ergActiveNow()) {
             val target = workoutTargetW() ?: return
             val pedalling = status == RideStatus.RUNNING
-            val out = erg.update(target, cadence, dt, pedalling)
-            desiredCommand = TrainerCommand.TargetPower(out.coerceIn(config.powerRange.first, config.powerRange.last))
+            val out = erg.update(target, cadence, dt, pedalling).coerceIn(config.powerRange.first, config.powerRange.last)
+            val prev = (desiredCommand as? TrainerCommand.TargetPower)?.watts
+            // Big changes (interval boundaries, protection) go out immediately; small ramp steps at most 1/s
+            // so the trainer is not flooded with control-point writes.
+            val diff = if (prev == null) Int.MAX_VALUE else abs(out - prev)
+            if (force || diff >= 10 || (diff > 0 && rideTime - lastPowerSetAt >= 1.0)) {
+                desiredCommand = TrainerCommand.TargetPower(out)
+                lastPowerSetAt = rideTime
+            }
         } else {
             val sim = gearbox.simulationFor(gradeNow(), config.physics)
             val prev = desiredCommand as? TrainerCommand.Simulation
