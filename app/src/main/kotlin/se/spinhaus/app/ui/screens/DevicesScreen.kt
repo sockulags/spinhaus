@@ -56,6 +56,7 @@ fun DevicesScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
     val trainer by hub.trainer.collectAsState()
     val controllers by hub.controllers.collectAsState()
     val hr by hub.heartRate.collectAsState()
+    val bluetoothOn by hub.bluetoothOn.collectAsState()
     val context = LocalContext.current
 
     DisposableEffect(Unit) {
@@ -81,7 +82,7 @@ fun DevicesScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
         },
     ) { pad ->
         Column(Modifier.padding(pad).padding(horizontal = 16.dp).verticalScroll(rememberScrollState())) {
-            if (!hub.scanner.bluetoothEnabled) {
+            if (!bluetoothOn) {
                 SpinCard(color = SpinColors.Bad.copy(alpha = 0.2f)) {
                     Text(t("Bluetooth is off. Turn it on in the tablet's settings.", "Bluetooth är avstängt. Slå på det i plattans inställningar."))
                 }
@@ -100,8 +101,17 @@ fun DevicesScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
                 val data by t0.data.collectAsState()
                 val caps by t0.capabilities.collectAsState()
                 val lastResult by t0.lastResult.collectAsState()
+                val elsewhere by t0.controlledElsewhere.collectAsState()
                 SpinCard {
                     DeviceHeader(t0.name, status)
+                    if (elsewhere) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            t("The trainer is controlled by another app (Zwift?). Close it completely – Spinhaus retries automatically.",
+                                "Trainern styrs av en annan app (Zwift?). Stäng den helt – Spinhaus försöker igen automatiskt."),
+                            color = SpinColors.Bad,
+                        )
+                    }
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                         StatValue(t("Power", "Effekt"), data.powerW?.toString() ?: "–", unit = "W")

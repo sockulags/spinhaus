@@ -44,6 +44,38 @@ class DeviceHub(
 
     private var started = false
 
+    private val _bluetoothOn = MutableStateFlow(scanner.bluetoothEnabled)
+    /** Live adapter state for the UI. */
+    val bluetoothOn: StateFlow<Boolean> = _bluetoothOn
+
+    private val adapterReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: Context, intent: android.content.Intent) {
+            when (intent.getIntExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, -1)) {
+                android.bluetooth.BluetoothAdapter.STATE_OFF -> {
+                    log.log("hub", "Bluetooth turned off")
+                    _bluetoothOn.value = false
+                    scanner.onAdapterOff()
+                    _trainer.value?.dropLink()
+                    _controllers.value.forEach { it.dropLink() }
+                    _hr.value?.dropLink()
+                }
+                android.bluetooth.BluetoothAdapter.STATE_ON -> {
+                    log.log("hub", "Bluetooth turned on")
+                    _bluetoothOn.value = true
+                    reconnectAll()
+                }
+            }
+        }
+    }
+
+    init {
+        androidx.core.content.ContextCompat.registerReceiver(
+            context, adapterReceiver,
+            android.content.IntentFilter(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+    }
+
     /** Connects remembered shared devices (trainer + controllers). */
     fun startShared() {
         if (started) return

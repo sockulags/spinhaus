@@ -138,6 +138,8 @@ fun RideScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
     val hr by app.hub.heartRate.collectAsState()
     val hrStatus by (hr?.status ?: remember { flowOf(null) }).collectAsState(initial = null)
 
+    val elsewhereFlow = remember(trainer) { trainer?.controlledElsewhere ?: kotlinx.coroutines.flow.MutableStateFlow(false) }
+    val trainerElsewhere by elsewhereFlow.collectAsState()
     val zoneColor by animateColorAsState(SpinColors.powerZone(sn.powerZone), label = "zone")
     val imperial = settings.units == Units.IMPERIAL
     val lang = LocalLanguage.current
@@ -184,6 +186,17 @@ fun RideScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
             Text(
                 msg, color = Color.White, fontSize = 22.sp, textAlign = TextAlign.Center,
                 modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.75f)).padding(horizontal = 20.dp, vertical = 12.dp),
+            )
+        }
+    }
+
+    if (trainerElsewhere || trainerStatus == DeviceStatus.RECONNECTING) {
+        Box(Modifier.fillMaxSize().padding(top = 110.dp), contentAlignment = Alignment.TopCenter) {
+            Text(
+                if (trainerElsewhere) t("Another app controls the trainer – close Zwift", "En annan app styr trainern – stäng Zwift")
+                else t("Trainer reconnecting…", "Trainern återansluter…"),
+                color = Color.White, fontWeight = FontWeight.Bold,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(SpinColors.Bad).padding(horizontal = 14.dp, vertical = 6.dp),
             )
         }
     }

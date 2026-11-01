@@ -100,7 +100,9 @@ fun SpinhausNavHost(app: AppContainer) {
     }
 
     CompositionLocalProvider(LocalLanguage provides (profile?.language ?: "sv")) {
-        NavHost(controller, startDestination = if (profileId == null) Routes.PROFILES else if (rideSession != null) Routes.RIDE else Routes.HOME) {
+        // Computed once: changing startDestination would rebuild the graph and wipe the back stack.
+        val start = remember { if (profileId == null) Routes.PROFILES else if (rideSession != null) Routes.RIDE else Routes.HOME }
+        NavHost(controller, startDestination = start) {
             composable(Routes.PROFILES) { ProfilePickerScreen(app, nav) }
             composable(Routes.PROFILE_EDIT, arguments = listOf(navArgument("id") { type = NavType.LongType })) {
                 ProfileEditScreen(app, nav, it.arguments?.getLong("id") ?: 0L)

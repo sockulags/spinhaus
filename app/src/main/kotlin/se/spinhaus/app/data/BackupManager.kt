@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import androidx.room.withTransaction
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
@@ -80,7 +81,10 @@ class BackupManager(private val context: Context, private val db: SpinhausDataba
         val text = context.contentResolver.openInputStream(uri)?.use { GZIPInputStream(it).bufferedReader().readText() }
             ?: error("Cannot open file")
         val b = json.decodeFromString(BackupFile.serializer(), text)
-        db.clearAllTables()
+        db.withTransaction {
+        for (t in listOf("samples", "activities", "ftp_history", "workouts", "profiles", "plan_items", "training_plans", "scheduled_workouts")) {
+            db.openHelper.writableDatabase.execSQL("DELETE FROM $t")
+        }
         for (p in b.profiles) db.profiles().insert(
             ProfileEntity(p.id, p.name, p.colorArgb, p.language, p.ftp, p.weightKg, p.birthYear, p.maxHr, p.restHr, p.hrModel,
                 p.hrSensorAddress, p.hrSensorName, p.settingsJson, p.createdAt),
@@ -94,6 +98,7 @@ class BackupManager(private val context: Context, private val db: SpinhausDataba
         )
         b.samples.chunked(2000).forEach { chunk ->
             db.activities().insertSamples(chunk.map { SampleEntity(it.a, it.t, it.p, it.tg, it.hr, it.c, it.s, it.d, it.al, it.g, it.gr, it.wt) })
+        }
         }
         b.activities.size
     }

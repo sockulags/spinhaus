@@ -19,13 +19,20 @@ import se.spinhaus.app.ride.RideController
 
 /** Manual dependency container, created once by [SpinhausApp]. */
 class AppContainer(val context: Context) {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    val bleLog = BleLog()
+    val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate +
+            kotlinx.coroutines.CoroutineExceptionHandler { _, e ->
+                // Never let one failing background task (e.g. a Bluetooth error) crash the app.
+                android.util.Log.e("Spinhaus", "Unhandled error", e)
+                runCatching { bleLog.log("error", "${e.javaClass.simpleName}: ${e.message}") }
+            },
+    )
     val db = SpinhausDatabase.create(context)
     val profiles = ProfileRepository(db)
     val workouts = WorkoutRepository(db)
     val activities = ActivityRepository(db)
     val deviceRepo = DeviceRepository(db)
-    val bleLog = BleLog()
     val hub = DeviceHub(context, scope, deviceRepo, bleLog)
     val ride = RideController(context, scope, hub, activities, profiles)
     val backup = BackupManager(context, db)

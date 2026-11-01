@@ -38,9 +38,20 @@ class GattClient(
     private val log: BleLog,
     private val tag: String,
 ) {
-    private var gatt: BluetoothGatt? = null
+    @Volatile private var gatt: BluetoothGatt? = null
     private val opMutex = Mutex()
-    private var pending: CompletableDeferred<Any?>? = null
+
+    /** The single outstanding GATT operation; callbacks only complete it if the key matches. */
+    private class PendingOp(val key: String) {
+        val result = CompletableDeferred<Any?>()
+    }
+    @Volatile private var pending: PendingOp? = null
+
+    private fun complete(key: String, value: Any?) {
+        val p = pending ?: return
+        if (p.key == key) p.result.complete(value)
+        else log.log(tag, "ignored late callback $key (waiting for ${p.key})")
+    }
     private var connectDeferred: CompletableDeferred<Boolean>? = null
     private var discoverDeferred: CompletableDeferred<Boolean>? = null
 
@@ -62,7 +73,7 @@ class GattClient(
                 _state.value = LinkState.DISCONNECTED
                 connectDeferred?.complete(false)
                 discoverDeferred?.complete(false)
-                pending?.complete(null)
+                pending?.result?.complete(null)
                 try { g.close() } catch (_: Exception) {}
                 if (gatt === g) gatt = null
             }
@@ -86,28 +97,28 @@ class GattClient(
         }
 
         override fun onCharacteristicRead(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
-            pending?.complete(if (status == BluetoothGatt.GATT_SUCCESS) value else null)
+            complete("r:${c.uuid}", if (status == BluetoothGatt.GATT_SUCCESS) value else null)
         }
 
         @Deprecated("Deprecated in Java")
         override fun onCharacteristicRead(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
                 @Suppress("DEPRECATION")
-                pending?.complete(if (status == BluetoothGatt.GATT_SUCCESS) c.value else null)
+                complete("r:${c.uuid}", if (status == BluetoothGatt.GATT_SUCCESS) c.value else null)
             }
         }
 
         override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
-            pending?.complete(status == BluetoothGatt.GATT_SUCCESS)
+            complete("w:${c.uuid}", status == BluetoothGatt.GATT_SUCCESS)
         }
 
         override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
-            pending?.complete(status == BluetoothGatt.GATT_SUCCESS)
+            complete("d:${d.characteristic.uuid}", status == BluetoothGatt.GATT_SUCCESS)
         }
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
             log.log(tag, "mtu=$mtu status=$status")
-            pending?.complete(status == BluetoothGatt.GATT_SUCCESS)
+            complete("mtu", status == BluetoothGatt.GATT_SUCCESS)
         }
     }
 
@@ -127,7 +138,16 @@ class GattClient(
         val d = CompletableDeferred<Boolean>()
         connectDeferred = d
         log.log(tag, "connecting to ${device.address}")
-        gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+        gatt = try {
+            device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+        } catch (e: SecurityException) {
+            log.log(tag, "no Bluetooth permission: ${e.message}")
+            null
+        }
+        if (gatt == null) {
+            _state.value = LinkState.DISCONNECTED
+            return false
+        }
         val ok = withTimeoutOrNull(timeoutMs) { d.await() } ?: false
         if (!ok) {
             log.log(tag, "connect failed/timeout")
@@ -138,7 +158,7 @@ class GattClient(
         discoverDeferred = dd
         val g = gatt ?: return false
         g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
-        if (!g.discoverServices()) {
+        if (!(try { g.discoverServices() } catch (e: SecurityException) { false })) {
             log.log(tag, "discoverServices() returned false")
             close(); return false
         }
@@ -154,19 +174,19 @@ class GattClient(
 
     fun hasService(service: String): Boolean = gatt?.getService(UUID.fromString(service)) != null
 
-    private suspend fun <T> op(timeoutMs: Long = 5000, block: (BluetoothGatt) -> Boolean): T? = opMutex.withLock {
+    private suspend fun op(key: String, timeoutMs: Long = 5000, block: (BluetoothGatt) -> Boolean): Any? = opMutex.withLock {
         val g = gatt ?: return@withLock null
-        val d = CompletableDeferred<Any?>()
-        pending = d
+        val p = PendingOp(key)
+        pending = p
         val started = try { block(g) } catch (e: Exception) {
-            log.log(tag, "op exception ${e.message}"); false
+            log.log(tag, "op $key exception ${e.message}"); false
         }
         if (!started) {
             pending = null
             return@withLock null
         }
-        @Suppress("UNCHECKED_CAST")
-        val r = withTimeoutOrNull(timeoutMs) { d.await() } as T?
+        val r = withTimeoutOrNull(timeoutMs) { p.result.await() }
+        if (r == null) log.log(tag, "op $key timed out")
         pending = null
         r
     }
@@ -177,7 +197,7 @@ class GattClient(
         val desc = c.getDescriptor(UUID.fromString(GattUuids.CCCD)) ?: return true
         val value = if (indicate) BluetoothGattDescriptor.ENABLE_INDICATION_VALUE else BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
         log.log(tag, "subscribe ${short(c.uuid)} indicate=$indicate")
-        return op<Boolean> { gg ->
+        return (op("d:${c.uuid}") { gg ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 gg.writeDescriptor(desc, value) == BluetoothGatt.GATT_SUCCESS
             } else {
@@ -186,7 +206,7 @@ class GattClient(
                 @Suppress("DEPRECATION")
                 gg.writeDescriptor(desc)
             }
-        } ?: false
+        } as? Boolean) ?: false
     }
 
     /** Subscribes with notify or indicate depending on the characteristic's properties. */
@@ -199,7 +219,7 @@ class GattClient(
     suspend fun write(c: BluetoothGattCharacteristic, value: ByteArray, withResponse: Boolean = true): Boolean {
         val type = if (withResponse) BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
         log.log(tag, "-> ${short(c.uuid)} ${value.toHex()}")
-        return op<Boolean> { g ->
+        return (op("w:${c.uuid}") { g ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 g.writeCharacteristic(c, value, type) == BluetoothGatt.GATT_SUCCESS
             } else {
@@ -210,15 +230,15 @@ class GattClient(
                 @Suppress("DEPRECATION")
                 g.writeCharacteristic(c)
             }
-        } ?: false
+        } as? Boolean) ?: false
     }
 
-    suspend fun read(c: BluetoothGattCharacteristic): ByteArray? = op<ByteArray> { g ->
+    suspend fun read(c: BluetoothGattCharacteristic): ByteArray? = op("r:${c.uuid}") { g ->
         @Suppress("DEPRECATION")
         g.readCharacteristic(c)
-    }
+    } as? ByteArray
 
-    suspend fun requestMtu(mtu: Int): Boolean = op<Boolean> { g -> g.requestMtu(mtu) } ?: false
+    suspend fun requestMtu(mtu: Int): Boolean = (op("mtu") { g -> g.requestMtu(mtu) } as? Boolean) ?: false
 
     fun close() {
         val g = gatt
@@ -227,7 +247,7 @@ class GattClient(
             try { g.disconnect() } catch (_: Exception) {}
             try { g.close() } catch (_: Exception) {}
         }
-        pending?.complete(null)
+        pending?.result?.complete(null)
         _state.value = LinkState.DISCONNECTED
     }
 }

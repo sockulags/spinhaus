@@ -60,22 +60,25 @@ abstract class DeviceConnection(
                 }
                 val ok = client.connect()
                 if (ok) {
+                    // Collect before setup so responses sent during setup (control point, RideOn) are not lost.
+                    val notifJob = launch { client.notifications.collect { onNotification(it.characteristic, it.value) } }
                     val ready = try { onConnected() } catch (e: Exception) {
                         log.log(tag, "setup failed: ${e.message}"); false
                     }
                     if (ready) {
                         attempt = 0
                         setStatus(DeviceStatus.CONNECTED)
-                        val notifJob = launch { client.notifications.collect { onNotification(it.characteristic, it.value) } }
                         // wait until link drops
                         client.state.first { it == LinkState.DISCONNECTED }
                         notifJob.cancel()
                         onDisconnected()
                         log.log(tag, "disconnected")
                     } else if (_status.value == DeviceStatus.LOCKED || _status.value == DeviceStatus.UNSUPPORTED) {
+                        notifJob.cancel()
                         client.close()
                         delay(20000)
                     } else {
+                        notifJob.cancel()
                         client.close()
                     }
                 }
@@ -85,10 +88,14 @@ abstract class DeviceConnection(
         }
     }
 
+    /** Drops the link (e.g. Bluetooth turned off); the supervisor loop reconnects later. */
+    fun dropLink() = client.close()
+
     fun stop() {
         job?.cancel()
         job = null
         client.close()
+        onDisconnected()
         setStatus(DeviceStatus.IDLE)
     }
 
@@ -145,7 +152,12 @@ class TrainerConnection(context: Context, device: BluetoothDevice, log: BleLog, 
     val lastResult: StateFlow<String?> = _lastResult
 
     private var controlPoint: BluetoothGattCharacteristic? = null
-    private var hasControl = false
+    @Volatile private var hasControl = false
+    private var controlResponse: kotlinx.coroutines.CompletableDeferred<Int>? = null
+    private var lastControlAttemptMs = 0L
+    private val _controlledElsewhere = MutableStateFlow(false)
+    /** True when the trainer refused control (another app such as Zwift is connected to it). */
+    val controlledElsewhere: StateFlow<Boolean> = _controlledElsewhere
     private val crank = CrankCadenceCalculator()
     private var usingFtmsData = false
 
@@ -171,7 +183,10 @@ class TrainerConnection(context: Context, device: BluetoothDevice, log: BleLog, 
             client.findCharacteristic(GattUuids.FTMS_SERVICE, GattUuids.FTMS_MACHINE_STATUS)?.let { client.subscribe(it) }
             controlPoint = client.findCharacteristic(GattUuids.FTMS_SERVICE, GattUuids.FTMS_CONTROL_POINT)
             controlPoint?.let { cp ->
-                client.enableNotifications(cp, indicate = true)
+                if (!client.enableNotifications(cp, indicate = true)) {
+                    log.log(tag, "could not enable control point indications")
+                    return false
+                }
                 requestControl()
             }
         }
@@ -186,18 +201,41 @@ class TrainerConnection(context: Context, device: BluetoothDevice, log: BleLog, 
         return true
     }
 
+    /** Requests control and waits for the trainer's answer. */
     private suspend fun requestControl(): Boolean {
         val cp = controlPoint ?: return false
-        val ok = client.write(cp, FtmsControl.requestControl())
-        if (ok) {
-            client.write(cp, FtmsControl.start())
-            hasControl = true
+        lastControlAttemptMs = System.currentTimeMillis()
+        val d = kotlinx.coroutines.CompletableDeferred<Int>()
+        controlResponse = d
+        if (!client.write(cp, FtmsControl.requestControl())) return false
+        val result = kotlinx.coroutines.withTimeoutOrNull(3000) { d.await() }
+        controlResponse = null
+        when (result) {
+            FtmsControl.RESULT_SUCCESS, null -> {
+                // null: no indication received – assume OK, some trainers don't answer.
+                hasControl = true
+                _controlledElsewhere.value = false
+                client.write(cp, FtmsControl.start())
+            }
+            FtmsControl.RESULT_CONTROL_NOT_PERMITTED -> {
+                hasControl = false
+                _controlledElsewhere.value = true
+                log.log(tag, "control refused – another app controls the trainer")
+            }
+            else -> hasControl = false
         }
-        return ok
+        return hasControl
+    }
+
+    private suspend fun ensureControl(): Boolean {
+        if (hasControl) return true
+        if (System.currentTimeMillis() - lastControlAttemptMs < 5000) return false
+        return requestControl()
     }
 
     override fun onDisconnected() {
         hasControl = false
+        _controlledElsewhere.value = false
         usingFtmsData = false
         _data.value = TrainerData()
     }
@@ -226,9 +264,11 @@ class TrainerConnection(context: Context, device: BluetoothDevice, log: BleLog, 
             GattUuids.FTMS_CONTROL_POINT -> {
                 val r = FtmsParser.parseControlPointResponse(value) ?: return
                 _lastResult.value = "op=0x%02x result=%d".format(r.requestOpCode, r.result)
-                if (r.result == FtmsControl.RESULT_CONTROL_NOT_PERMITTED) {
+                if (r.requestOpCode == FtmsControl.OP_REQUEST_CONTROL) {
+                    controlResponse?.complete(r.result)
+                } else if (r.result == FtmsControl.RESULT_CONTROL_NOT_PERMITTED) {
+                    // Lost control (e.g. trainer reset); re-request on the next send, with back-off.
                     hasControl = false
-                    scope.launch { requestControl() }
                 }
             }
             else -> handleBattery(uuid, value)
@@ -238,7 +278,7 @@ class TrainerConnection(context: Context, device: BluetoothDevice, log: BleLog, 
     suspend fun send(cmd: TrainerCommand): Boolean {
         val cp = controlPoint ?: return false
         if (status.value != DeviceStatus.CONNECTED) return false
-        if (!hasControl) requestControl()
+        if (!ensureControl()) return false
         val bytes = when (cmd) {
             is TrainerCommand.TargetPower -> FtmsControl.setTargetPower(cmd.watts)
             is TrainerCommand.Simulation -> FtmsControl.setSimulation(cmd.params.gradePercent, cmd.params.crr, cmd.params.cw, cmd.params.windMs)
@@ -249,6 +289,7 @@ class TrainerConnection(context: Context, device: BluetoothDevice, log: BleLog, 
     suspend fun sendRaw(bytes: ByteArray): Boolean {
         val cp = controlPoint ?: return false
         if (!hasControl) requestControl()
+        if (!hasControl) return false
         return client.write(cp, bytes)
     }
 }

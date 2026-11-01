@@ -118,6 +118,7 @@ class RideController(
         audio.absolute = workout?.absolutePower == true
         audio.prepare(s.sound, profile.language)
         RideService.start(context)
+        if (senderJob?.isActive != true) senderJob = scope.launch { senderLoop() }
         tickJob = scope.launch { tickLoop(e) }
         buttonJob = scope.launch { buttonLoop(e) }
         true
@@ -136,16 +137,26 @@ class RideController(
     }
 
     private fun afterInput(e: RideEngine) {
-        scope.launch { flushCommand(e) }
+        flushCommand(e)
         dispatchEvents(e)
         _snapshot.value = e.snapshot(System.currentTimeMillis())
     }
 
-    private suspend fun flushCommand(e: RideEngine) {
+    /** Latest command wins; a single sender coroutine talks to the trainer so the tick loop never blocks. */
+    private val commands = kotlinx.coroutines.channels.Channel<Pair<RideEngine, se.spinhaus.core.ride.TrainerCommand>>(kotlinx.coroutines.channels.Channel.CONFLATED)
+    private var senderJob: Job? = null
+
+    private fun flushCommand(e: RideEngine) {
         val cmd = e.takeCommand() ?: return
-        val t = hub.trainer.value
-        val ok = t?.send(cmd) ?: false
-        if (!ok) e.invalidateTrainer()
+        commands.trySend(e to cmd)
+    }
+
+    private suspend fun senderLoop() {
+        for ((e, cmd) in commands) {
+            if (engine !== e) continue
+            val ok = hub.trainer.value?.send(cmd) ?: false
+            if (!ok) e.invalidateTrainer()
+        }
     }
 
     private fun dispatchEvents(e: RideEngine) {

@@ -20,8 +20,8 @@ class RideService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
+        // intent == null: the system restarted us after process death – there is no ride anymore.
+        if (intent == null || intent.action == ACTION_STOP) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -38,12 +38,18 @@ class RideService : Service() {
             .setOngoing(true)
             .setContentIntent(pi)
             .build()
-        startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+        try {
+            startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+        } catch (e: Exception) {
+            // Missing Bluetooth permission on Android 14+: run without the foreground service.
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (wakeLock == null) {
             wakeLock = getSystemService(PowerManager::class.java)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "spinhaus:ride").apply { acquire(6 * 60 * 60 * 1000L) }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
@@ -57,11 +63,14 @@ class RideService : Service() {
         private const val ACTION_STOP = "stop"
 
         fun start(context: Context) {
-            context.startForegroundService(Intent(context, RideService::class.java))
+            val granted = context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!granted) return
+            runCatching { context.startForegroundService(Intent(context, RideService::class.java).setAction("start")) }
         }
 
         fun stop(context: Context) {
-            context.startService(Intent(context, RideService::class.java).setAction(ACTION_STOP))
+            runCatching { context.stopService(Intent(context, RideService::class.java)) }
         }
     }
 }

@@ -88,5 +88,10 @@ class BleScanner(private val context: Context, private val log: BleLog) {
         log.log("scan", "scan stopped")
     }
 
+    /** Called when the adapter turns off: the scan is gone without a callback. */
+    fun onAdapterOff() {
+        _scanning.value = false
+    }
+
     fun remoteDevice(address: String) = adapter?.getRemoteDevice(address)
 }

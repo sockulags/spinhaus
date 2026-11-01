@@ -185,7 +185,7 @@ fun SettingsScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { exportLauncher.launch("spinhaus-backup-${java.time.LocalDate.now()}.json.gz") }) { Text(t("Create backup", "Skapa backup")) }
-                    OutlinedButton(onClick = { importLauncher.launch(arrayOf("*/*")) }) { Text(t("Restore backup", "Återställ backup")) }
+                    OutlinedButton(enabled = !app.ride.active, onClick = { importLauncher.launch(arrayOf("*/*")) }) { Text(t("Restore backup", "Återställ backup")) }
                 }
             }
 
