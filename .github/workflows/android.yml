@@ -33,10 +33,10 @@ jobs:
 
       - name: Prepare signing key
         env:
-          KEYSTORE_B64: ${{ secrets.SPINHAUS_KEYSTORE_B64 }}
+          PW: ${{ secrets.SPINHAUS_KEYSTORE_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          if [ -n "$PW" ]; then
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in app/signing/release.jks.enc -out "$RUNNER_TEMP/release.jks" -pass env:PW
             echo "SPINHAUS_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
           else
             echo "::warning::No signing secret – APK is signed with a temporary debug key"
