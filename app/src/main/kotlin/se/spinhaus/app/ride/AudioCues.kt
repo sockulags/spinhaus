@@ -31,6 +31,13 @@ class AudioCues(private val context: Context) {
         if (settings.mode == SoundMode.VOICE && tts == null) {
             tts = TextToSpeech(context) { status ->
                 ttsReady = status == TextToSpeech.SUCCESS
+                tts?.setOnUtteranceProgressListener(progress)
+                tts?.setAudioAttributes(
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build(),
+                )
                 applyLanguage()
             }
         } else applyLanguage()
@@ -55,12 +62,38 @@ class AudioCues(private val context: Context) {
         tone?.startTone(if (long) ToneGenerator.TONE_PROP_BEEP2 else ToneGenerator.TONE_PROP_BEEP, if (long) 400 else 150)
     }
 
+    private val audioManager = context.getSystemService(AudioManager::class.java)
+    private val focusRequest = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+        .setAudioAttributes(
+            android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build(),
+        )
+        .build()
+    private var speaking = 0
+
     private fun say(text: String) {
         if (settings.mode != SoundMode.VOICE) return
         val t = tts ?: return
         if (!ttsReady) return
+        // Lower the film's volume while speaking (audio ducking).
+        if (speaking++ == 0) runCatching { audioManager.requestAudioFocus(focusRequest) }
         val params = android.os.Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, settings.volume) }
         t.speak(text, TextToSpeech.QUEUE_ADD, params, "spin-${System.nanoTime()}")
+    }
+
+    private val progress = object : android.speech.tts.UtteranceProgressListener() {
+        override fun onStart(utteranceId: String?) {}
+        override fun onDone(utteranceId: String?) = release1()
+        @Deprecated("Deprecated in Java")
+        override fun onError(utteranceId: String?) = release1()
+        private fun release1() {
+            if (--speaking <= 0) {
+                speaking = 0
+                runCatching { audioManager.abandonAudioFocusRequest(focusRequest) }
+            }
+        }
     }
 
     fun connectionLost(device: String) {

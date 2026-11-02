@@ -1,1 +1,3 @@
-Träningsplaner: välj bland fyra planer (Komma igång, Grundträning, FTP-bygge, VO2max). Hemskärmen visar nästa pass. Missade pass kan göras i efterhand.
+- Träningsplaner: fyra planer, nästa pass på hemskärmen, missade pass kan göras i efterhand.
+- Film under passet: 🎬 Film på åkskärmen, flytande ruta med siffror ovanpå Netflix/YouTube.
+- Höger power-up-knapp spelar/pausar filmen. Filmen pausas när passet pausas. Filmljudet sänks när rösten pratar.

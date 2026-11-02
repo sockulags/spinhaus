@@ -8,6 +8,8 @@ import se.spinhaus.core.ble.RideButton
 enum class ControlAction {
     NONE, SHIFT_UP, SHIFT_DOWN, INTENSITY_UP, INTENSITY_DOWN, SKIP_INTERVAL, TOGGLE_ERG,
     PAUSE_RESUME, LAP, NEXT_PAGE, PREV_PAGE, TOGGLE_GRAPH, GRADE_UP, GRADE_DOWN,
+    /** Play/pause the film or music playing in another app. */
+    MEDIA_PLAY_PAUSE,
 }
 
 @Serializable
@@ -27,6 +29,7 @@ data class ControllerMapping(
             RideButton.RIGHT to ButtonBinding(ControlAction.NEXT_PAGE),
             RideButton.Y to ButtonBinding(ControlAction.PAUSE_RESUME),
             RideButton.Z to ButtonBinding(ControlAction.TOGGLE_GRAPH),
+            RideButton.POWERUP_RIGHT to ButtonBinding(ControlAction.MEDIA_PLAY_PAUSE),
         )
         val defaultErg: Map<RideButton, ButtonBinding> = common + mapOf(
             RideButton.SHIFT_UP_RIGHT to ButtonBinding(ControlAction.INTENSITY_UP),

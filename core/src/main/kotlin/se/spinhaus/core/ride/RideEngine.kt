@@ -207,7 +207,8 @@ class RideEngine(val config: RideConfig) {
             }
             ControlAction.GRADE_UP -> if (route == null) { manualGrade = (manualGrade + config.gradeStep).coerceAtMost(15.0); updateCommand(force = true) }
             ControlAction.GRADE_DOWN -> if (route == null) { manualGrade = (manualGrade - config.gradeStep).coerceAtLeast(-10.0); updateCommand(force = true) }
-            ControlAction.NEXT_PAGE, ControlAction.PREV_PAGE, ControlAction.TOGGLE_GRAPH -> events += RideEvent.UiAction(action)
+            ControlAction.NEXT_PAGE, ControlAction.PREV_PAGE, ControlAction.TOGGLE_GRAPH,
+            ControlAction.MEDIA_PLAY_PAUSE -> events += RideEvent.UiAction(action)
             ControlAction.NONE -> {}
         }
     }

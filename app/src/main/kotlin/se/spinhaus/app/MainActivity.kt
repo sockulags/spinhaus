@@ -38,6 +38,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        app.setAppVisible(true)
+    }
+
+    override fun onStop() {
+        app.setAppVisible(false)
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         app.updates.check()

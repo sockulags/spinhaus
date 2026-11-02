@@ -152,6 +152,27 @@ fun SettingsScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
                 }
             }
 
+            SectionTitle(t("Film while riding", "Film under passet"))
+            SpinCard {
+                LabeledRow(t("Floating box over other apps", "Flytande ruta över andra appar")) {
+                    Switch(s.film.overlay, { app.saveSettings(profile, s.copy(film = s.film.copy(overlay = it))) })
+                }
+                LabeledRow(t("Pause the film when the ride pauses", "Pausa filmen när passet pausas")) {
+                    Switch(s.film.pauseWithRide, { app.saveSettings(profile, s.copy(film = s.film.copy(pauseWithRide = it))) })
+                }
+                LabeledRow(t("Show more values", "Visa fler värden")) {
+                    Switch(s.film.expanded, { app.saveSettings(profile, s.copy(film = s.film.copy(expanded = it))) })
+                }
+                var op by remember(s.film.opacity) { mutableStateOf(s.film.opacity) }
+                LabeledRow(t("Opacity", "Synlighet") + " ${(op * 100).roundToInt()} %") {}
+                Slider(op, { op = it }, valueRange = 0.3f..1f, onValueChangeFinished = { app.saveSettings(profile, s.copy(film = s.film.copy(opacity = op))) })
+                if (!app.overlay.canDraw()) {
+                    TextButton(onClick = { runCatching { context.startActivity(app.overlay.permissionIntent()) } }) {
+                        Text(t("Allow 'display over other apps'", "Tillåt 'visa över andra appar'"))
+                    }
+                }
+            }
+
             SectionTitle(t("Virtual shifting", "Virtuell växling"))
             SpinCard {
                 Text(
@@ -367,6 +388,7 @@ private fun actionName(a: ControlAction): String = when (a) {
     ControlAction.TOGGLE_GRAPH -> t("Show/hide graph", "Visa/dölj graf")
     ControlAction.GRADE_UP -> t("Grade +", "Lutning +")
     ControlAction.GRADE_DOWN -> t("Grade −", "Lutning −")
+    ControlAction.MEDIA_PLAY_PAUSE -> t("Play/pause film", "Spela/pausa film")
 }
 
 @Composable

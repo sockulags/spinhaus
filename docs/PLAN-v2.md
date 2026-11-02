@@ -1,6 +1,6 @@
 # Spinhaus v2 – Träningsplaner och film under passet
 
-Status: **Under utveckling** · 2026-11-02
+Status: **Byggd – testas** · 2026-11-02
 
 Omfattning (ditt val):
 1. **Träningsplaner** med "nästa pass" på hemskärmen

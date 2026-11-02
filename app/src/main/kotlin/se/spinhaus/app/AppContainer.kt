@@ -36,6 +36,11 @@ class AppContainer(val context: Context) {
     val hub = DeviceHub(context, scope, deviceRepo, bleLog)
     val plans = se.spinhaus.app.data.PlanRepository(db, profiles)
     val ride = RideController(context, scope, hub, activities, profiles, plans)
+    val overlay = se.spinhaus.app.ride.FilmOverlay(context, scope, this)
+
+    init {
+        ride.appVisibleProvider = { _appVisible.value }
+    }
     val backup = BackupManager(context, db)
     val updates = se.spinhaus.app.update.UpdateManager(context, scope)
 
@@ -44,6 +49,11 @@ class AppContainer(val context: Context) {
     private val _currentProfileId = MutableStateFlow<Long?>(prefs.getLong(KEY_PROFILE, -1L).takeIf { it > 0 })
     /** Selected profile, or null when the profile picker should be shown. */
     val currentProfileId: StateFlow<Long?> = _currentProfileId
+
+    private val _appVisible = MutableStateFlow(false)
+    /** True while a Spinhaus screen is visible (used to show/hide the film overlay). */
+    val appVisible: StateFlow<Boolean> = _appVisible
+    fun setAppVisible(v: Boolean) { _appVisible.value = v }
 
     private val _recovered = MutableStateFlow(0)
     /** Number of interrupted rides recovered at start-up (shown once). */

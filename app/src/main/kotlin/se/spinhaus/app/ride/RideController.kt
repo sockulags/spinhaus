@@ -166,8 +166,27 @@ class RideController(
         }
     }
 
+    private val audioManager = context.getSystemService(android.media.AudioManager::class.java)
+
+    private fun mediaKey(code: Int) {
+        runCatching {
+            audioManager.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, code))
+            audioManager.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, code))
+        }
+    }
+
+    /** Film control: only when another app is in front (film mode). */
+    private fun filmMode() = !appVisibleProvider()
+    var appVisibleProvider: () -> Boolean = { true }
+
     private fun dispatchEvents(e: RideEngine) {
         for (ev in e.drainEvents()) {
+            val film = _session.value?.profile?.settings?.film
+            when {
+                ev is RideEvent.UiAction && ev.action == ControlAction.MEDIA_PLAY_PAUSE -> mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+                ev is RideEvent.Paused && film?.pauseWithRide == true && filmMode() -> mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_PAUSE)
+                ev is RideEvent.Resumed && film?.pauseWithRide == true && filmMode() -> mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_PLAY)
+            }
             audio.handle(ev)
             if (ev is RideEvent.Shifted && _session.value?.profile?.settings?.vibrateOnShift == true) hub.vibrateControllers()
             _events.tryEmit(ev)
@@ -234,7 +253,10 @@ class RideController(
 
     private fun bindingFor(b: RideButton, ergActive: Boolean): ButtonBinding {
         val mapping = _session.value?.profile?.settings?.mapping ?: return ButtonBinding()
-        return (if (ergActive) mapping.erg else mapping.sim)[b] ?: ButtonBinding()
+        val map = if (ergActive) mapping.erg else mapping.sim
+        val defaults = if (ergActive) se.spinhaus.core.ride.ControllerMapping.defaultErg else se.spinhaus.core.ride.ControllerMapping.defaultSim
+        // Buttons missing from an older saved mapping fall back to the defaults (e.g. new actions).
+        return map[b] ?: defaults[b] ?: ButtonBinding()
     }
 
     private suspend fun buttonLoop(e: RideEngine) {

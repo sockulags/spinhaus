@@ -95,6 +95,7 @@ fun RideScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
     val samplesVersion by app.ride.samplesVersion.collectAsState()
     val context = LocalContext.current
     var confirmEnd by remember { mutableStateOf(false) }
+    var filmOpen by remember { mutableStateOf(false) }
     var ending by remember { mutableStateOf(false) }
     val settings = profile.settings
     var page by remember { mutableIntStateOf(0) }
@@ -178,6 +179,7 @@ fun RideScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
         Controls(sn, s.mode is RideMode.Free && (s.mode as RideMode.Free).route == null,
             onAction = { app.ride.action(it) },
             onEnd = { confirmEnd = true },
+            onFilm = { filmOpen = true },
         )
     }
 
@@ -210,6 +212,8 @@ fun RideScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
             )
         }
     }
+
+    if (filmOpen) FilmDialog(app, onDismiss = { filmOpen = false })
 
     if (confirmEnd) {
         AlertDialog(
@@ -440,7 +444,7 @@ private fun tileContent(type: TileType, sn: RideSnapshot, profile: ProfileEntity
 }
 
 @Composable
-private fun Controls(sn: RideSnapshot, manualGrade: Boolean, onAction: (ControlAction) -> Unit, onEnd: () -> Unit) {
+private fun Controls(sn: RideSnapshot, manualGrade: Boolean, onAction: (ControlAction) -> Unit, onEnd: () -> Unit, onFilm: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -464,6 +468,7 @@ private fun Controls(sn: RideSnapshot, manualGrade: Boolean, onAction: (ControlA
             BigButton(t("Skip", "Hoppa över"), Icons.Filled.SkipNext) { onAction(ControlAction.SKIP_INTERVAL) }
         }
         Spacer(Modifier.weight(1f))
+        BigButton("🎬 " + t("Film", "Film"), null, onFilm)
         FilledTonalButton(onClick = onEnd, modifier = Modifier.height(56.dp)) {
             Icon(Icons.Filled.Stop, null, tint = SpinColors.Bad)
             Spacer(Modifier.width(6.dp))
@@ -483,3 +488,65 @@ private fun BigButton(label: String, icon: androidx.compose.ui.graphics.vector.I
     }
 }
 
+
+private val filmApps = listOf(
+    "com.netflix.mediaclient" to "Netflix",
+    "com.google.android.youtube" to "YouTube",
+    "se.svt.svtplay" to "SVT Play",
+    "se.svt.android.svtplay" to "SVT Play",
+    "se.tv4.tv4playtab" to "TV4 Play",
+    "se.tv4.tv4play" to "TV4 Play",
+    "com.viaplay.android" to "Viaplay",
+    "com.disney.disneyplus" to "Disney+",
+    "com.wbd.stream" to "Max",
+    "com.amazon.avod.thirdpartyclient" to "Prime Video",
+)
+
+@Composable
+private fun FilmDialog(app: AppContainer, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val pm = context.packageManager
+    val installed = remember { filmApps.mapNotNull { (pkg, name) -> pm.getLaunchIntentForPackage(pkg)?.let { name to it } }.distinctBy { it.first } }
+    var canDraw by remember { mutableStateOf(app.overlay.canDraw()) }
+    LaunchedEffect(Unit) {
+        while (!canDraw) { kotlinx.coroutines.delay(1000); canDraw = app.overlay.canDraw() }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(t("Watch while you ride", "Titta medan du cyklar")) },
+        text = {
+            Column {
+                if (!canDraw) {
+                    Text(
+                        t("To show your numbers on top of the film, allow Spinhaus to \"display over other apps\". You only need to do this once.",
+                            "För att visa dina siffror ovanpå filmen behöver Spinhaus få \"visa över andra appar\". Det behövs bara en gång."),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    FilledTonalButton(onClick = { runCatching { context.startActivity(app.overlay.permissionIntent()) } }) {
+                        Text(t("Allow", "Tillåt"))
+                    }
+                } else {
+                    Text(
+                        t("Open your film app. A small box with your numbers floats on top – drag it, double-tap for more, tap to come back. The handlebar buttons keep working; right power-up pauses the film.",
+                            "Öppna din filmapp. En liten ruta med dina siffror ligger ovanpå – dra i den, dubbeltryck för mer, tryck för att komma tillbaka. Knapparna på styret fungerar som vanligt; höger power-up pausar filmen."),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    if (installed.isEmpty()) Text(t("No film apps found – open one from the home screen.", "Inga filmappar hittades – öppna en från hemskärmen."), color = SpinColors.Muted)
+                    FlowRowCompat {
+                        for ((name, intent) in installed) FilledTonalButton(onClick = {
+                            onDismiss()
+                            runCatching { context.startActivity(intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                        }) { Text(name) }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(t("Close", "Stäng")) } },
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FlowRowCompat(content: @Composable () -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
+}

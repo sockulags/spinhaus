@@ -82,3 +82,11 @@ exportera loggen: **Enheter → Logg → Exportera**.
 - [ ] Byt ett pass mot ett annat från biblioteket.
 - [ ] Min plan: alla veckor med status. Ett missat pass går att köra med "Gör nu".
 - [ ] Hennes profil kan ha en annan plan samtidigt.
+
+## 11. Film under passet (v2)
+- [ ] Starta ett pass → 🎬 Film → Tillåt "visa över andra appar" (första gången).
+- [ ] Öppna YouTube/Netflix → en ruta med watt, mål, puls och nedräkning ligger ovanpå.
+- [ ] Dra rutan, dubbeltryck (fler värden), tryck (tillbaka till Spinhaus – rutan försvinner).
+- [ ] Höger power-up pausar/startar filmen. Sluta trampa → filmen pausas; trampa → fortsätter.
+- [ ] Rösten hörs vid intervallbyte och filmljudet sänks kort.
+- [ ] Växla/ändra intensitet med styret medan filmen visas.
