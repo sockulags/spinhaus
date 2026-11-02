@@ -73,3 +73,12 @@ exportera loggen: **Enheter → Logg → Exportera**.
 - [ ] Inställningar → Skapa backup → spara t.ex. på Google Drive.
 - [ ] Mitt i en åktur: stäng appen via "senaste appar". Öppna igen → åkturen finns i historiken
       ("återställd").
+
+## 10. Träningsplaner (v2)
+- [ ] Hem → "Träningsplaner" → välj en plan → Starta idag.
+- [ ] Hemkortet visar vecka, antal klara och nästa pass med graf.
+- [ ] Starta nästa pass från kortet, kör en stund, avsluta och spara → passet är markerat Klar.
+- [ ] Hoppa över ett pass → nästa pass visas. Ångra i Min plan.
+- [ ] Byt ett pass mot ett annat från biblioteket.
+- [ ] Min plan: alla veckor med status. Ett missat pass går att köra med "Gör nu".
+- [ ] Hennes profil kan ha en annan plan samtidigt.

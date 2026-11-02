@@ -104,6 +104,7 @@ fun HomeScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
                 }
             }
             item(span = { GridItemSpan(maxLineSpan) }) { UpdateBanner(app) }
+            if (session == null) item(span = { GridItemSpan(maxLineSpan) }) { PlanHomeCard(app, nav, profile) }
             if (session != null) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     SpinCard(color = SpinColors.Primary.copy(alpha = 0.2f)) {

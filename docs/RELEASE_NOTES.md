@@ -1,1 +1,1 @@
-Zwift Ride: vänster del av styret läggs till automatiskt (den skickar knapparna från båda sidor). Dubbla tryck filtreras bort.
+Träningsplaner: välj bland fyra planer (Komma igång, Grundträning, FTP-bygge, VO2max). Hemskärmen visar nästa pass. Missade pass kan göras i efterhand.

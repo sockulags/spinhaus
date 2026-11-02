@@ -34,7 +34,8 @@ class AppContainer(val context: Context) {
     val activities = ActivityRepository(db)
     val deviceRepo = DeviceRepository(db)
     val hub = DeviceHub(context, scope, deviceRepo, bleLog)
-    val ride = RideController(context, scope, hub, activities, profiles)
+    val plans = se.spinhaus.app.data.PlanRepository(db, profiles)
+    val ride = RideController(context, scope, hub, activities, profiles, plans)
     val backup = BackupManager(context, db)
     val updates = se.spinhaus.app.update.UpdateManager(context, scope)
 

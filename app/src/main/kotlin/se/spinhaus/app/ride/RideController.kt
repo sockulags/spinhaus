@@ -47,6 +47,8 @@ data class RideSession(
     val type: String,
     val activityId: Long,
     val expanded: ExpandedWorkout?,
+    /** Plan slot this ride was started for, if any. */
+    val planSlot: se.spinhaus.core.plan.PlanSlot? = null,
 )
 
 data class RideResult(
@@ -65,6 +67,7 @@ class RideController(
     private val hub: DeviceHub,
     private val activities: ActivityRepository,
     private val profiles: ProfileRepository,
+    private val plans: se.spinhaus.app.data.PlanRepository,
 ) {
     private var engine: RideEngine? = null
     private var tickJob: Job? = null
@@ -89,7 +92,10 @@ class RideController(
 
     fun samples(): List<Sample> = engine?.samples()?.toList() ?: emptyList()
 
-    suspend fun start(profile: ProfileEntity, mode: RideMode, title: String, type: String): Boolean = mutex.withLock {
+    suspend fun start(
+        profile: ProfileEntity, mode: RideMode, title: String, type: String,
+        planSlot: se.spinhaus.core.plan.PlanSlot? = null,
+    ): Boolean = mutex.withLock {
         if (_session.value != null) return false
         val s = profile.settings
         val trainerCaps = hub.trainer.value?.capabilities?.value
@@ -114,7 +120,7 @@ class RideController(
         engine = e
         savedSamples = 0
         trackers.clear()
-        _session.value = RideSession(profile, mode, title, type, id, workout?.let { ExpandedWorkout.of(it) })
+        _session.value = RideSession(profile, mode, title, type, id, workout?.let { ExpandedWorkout.of(it) }, planSlot)
         audio.ftp = profile.ftp
         audio.absolute = workout?.absolutePower == true
         audio.prepare(s.sound, profile.language)
@@ -284,6 +290,14 @@ class RideController(
         }
         val done = activities.complete(s.activityId, profiles.get(s.profile.id), s.title) ?: return RideResult(null)
         val workout = (s.mode as? RideMode.Structured)?.workout
+        // Count the ride for the training plan (chosen slot, or the next slot if it is the same workout).
+        if (workout != null) runCatching {
+            plans.state(s.profile.id)?.let { st ->
+                se.spinhaus.core.plan.PlanProgress.slotForRide(st, workout.id, s.planSlot)?.let { slot ->
+                    plans.markDone(s.profile.id, slot, done.id)
+                }
+            }
+        }
         val testFtp = if (workout?.ftpTest != null) FtpTests.calculateFtp(workout, samples) else null
         val estimate = if (testFtp == null) {
             val since = System.currentTimeMillis() - 42L * 24 * 3600 * 1000

@@ -52,6 +52,11 @@ object Routes {
     const val DASHBOARD = "dashboard"
     const val BUTTONS = "buttons"
     const val DIAGNOSTICS = "diagnostics"
+    const val PLANS = "plans"
+    const val PLAN = "plan/{id}"
+    const val MY_PLAN = "myplan"
+
+    fun plan(id: String) = "plan/$id"
 
     fun profileEdit(id: Long) = "profile/$id"
     fun library(category: String? = null) = if (category == null) "library" else "library?cat=$category"
@@ -67,9 +72,9 @@ class Nav(val controller: NavHostController, val app: AppContainer) {
     fun home() = controller.navigate(Routes.HOME) { popUpTo(Routes.HOME) { inclusive = true }; launchSingleTop = true }
 
     /** Starts a ride and opens the ride screen. type: WORKOUT, FREE or TEST */
-    fun startRide(profile: ProfileEntity, mode: RideMode, title: String, type: String) {
+    fun startRide(profile: ProfileEntity, mode: RideMode, title: String, type: String, planSlot: se.spinhaus.core.plan.PlanSlot? = null) {
         app.scope.launch {
-            if (app.ride.start(profile, mode, title, type) || app.ride.active) {
+            if (app.ride.start(profile, mode, title, type, planSlot) || app.ride.active) {
                 controller.navigate(Routes.RIDE) { launchSingleTop = true }
             }
         }
@@ -146,6 +151,11 @@ fun SpinhausNavHost(app: AppContainer) {
             composable(Routes.DASHBOARD) { WithProfile(profile) { p -> DashboardEditorScreen(app, nav, p) } }
             composable(Routes.BUTTONS) { WithProfile(profile) { p -> ButtonsScreen(app, nav, p) } }
             composable(Routes.DIAGNOSTICS) { WithProfile(profile) { p -> DiagnosticsScreen(app, nav, p) } }
+            composable(Routes.PLANS) { WithProfile(profile) { p -> se.spinhaus.app.ui.screens.PlansScreen(app, nav, p) } }
+            composable(Routes.PLAN, arguments = listOf(navArgument("id") { type = NavType.StringType })) {
+                WithProfile(profile) { p -> se.spinhaus.app.ui.screens.PlanDetailScreen(app, nav, p, it.arguments?.getString("id") ?: "") }
+            }
+            composable(Routes.MY_PLAN) { WithProfile(profile) { p -> se.spinhaus.app.ui.screens.MyPlanScreen(app, nav, p) } }
         }
     }
 }

@@ -100,6 +100,7 @@ data class ProfileSettings(
     val units: Units = Units.METRIC,
     val vibrateOnShift: Boolean = true,
     val showGraph: Boolean = true,
+    val activePlan: se.spinhaus.core.plan.ActivePlan? = null,
 ) {
     companion object {
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }

@@ -138,4 +138,20 @@ interface PlanDao {
 
     @Query("SELECT * FROM scheduled_workouts WHERE profileId = :profileId ORDER BY epochDay")
     fun observeScheduled(profileId: Long): Flow<List<ScheduledWorkoutEntity>>
+
+    /** Records of one plan run (identified by its start day). planItemId holds the slot key. */
+    @Query("SELECT * FROM scheduled_workouts WHERE profileId = :profileId AND epochDay = :startDay")
+    fun observeRun(profileId: Long, startDay: Long): Flow<List<ScheduledWorkoutEntity>>
+
+    @Query("SELECT * FROM scheduled_workouts WHERE profileId = :profileId AND epochDay = :startDay")
+    suspend fun run(profileId: Long, startDay: Long): List<ScheduledWorkoutEntity>
+
+    @Query("DELETE FROM scheduled_workouts WHERE profileId = :profileId AND epochDay = :startDay AND planItemId = :slotKey")
+    suspend fun deleteSlot(profileId: Long, startDay: Long, slotKey: Long)
+
+    @Query("DELETE FROM scheduled_workouts WHERE profileId = :profileId AND epochDay = :startDay")
+    suspend fun deleteRun(profileId: Long, startDay: Long)
+
+    @Insert
+    suspend fun insertScheduled(e: ScheduledWorkoutEntity): Long
 }

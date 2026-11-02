@@ -1,6 +1,6 @@
 # Spinhaus v2 – Träningsplaner och film under passet
 
-Status: **Planering** · 2026-11-02
+Status: **Under utveckling** · 2026-11-02
 
 Omfattning (ditt val):
 1. **Träningsplaner** med "nästa pass" på hemskärmen
@@ -20,6 +20,9 @@ Omfattning (ditt val):
   fortsätter med nästa veckas första pass.
 - Ett pass räknas som gjort när det **startas från planen och sparas**. Startar du samma pass från
   biblioteket räknas det också, om det är nästa pass i planen.
+- **Missade pass går att välja manuellt** i *Min plan* och köras i efterhand. De räknas då som
+  gjorda (sent). Som standard visar hemkortet och planvyn alltid veckans nästa pass enligt plan och
+  schema.
 - Du kan **hoppa över** ett pass (räknas som missat) eller **byta** det mot ett annat pass från
   biblioteket (bara för den gången).
 - Passen är i % av FTP. När planens FTP-test sparar ny FTP blir resten av planen automatiskt
