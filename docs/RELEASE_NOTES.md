@@ -1,2 +1,3 @@
-- Puls-ERG: nya pulsstyrda pass (Puls zon 2 · 45/60/90, Pulsstege). Trainern justerar motståndet så att pulsen ligger rätt. Målpuls går att sätta i passeditorn.
-- Mindre app: snabbare nedladdning vid uppdatering.
+**Prov: 3D-värld.** Hem → 3D-värld → välj Alpe d'Huez (eller Demo-slingan utan internet). Terräng och kartdata laddas ner första gången. Trainern följer den riktiga lutningen. FPS visas uppe till vänster – säg hur det flyter!
+
+Världen bygger på VeloPopuli (öppen källkod, GPLv3). Spinhaus är nu också GPLv3.

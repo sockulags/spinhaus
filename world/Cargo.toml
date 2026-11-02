@@ -1,0 +1,36 @@
+[package]
+name = "spinhaus-world"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "3D world for Spinhaus, built on VeloPopuli's world generation (GPLv3)."
+publish = false
+
+[lib]
+name = "spinhaus_world"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "world-preview"
+path = "src/bin/preview.rs"
+required-features = ["preview"]
+
+[features]
+preview = ["dep:tiny_http"]
+
+[dependencies]
+velopopuli-core = { git = "https://github.com/pepperstm/velopopuli", rev = "a1e4725edfa3c2c71722e53ee93cc797cb18d831" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+futures = "0.3"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "macros", "sync"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+png = "0.17"
+jni = "0.21"
+tiny_http = { version = "0.12", optional = true }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

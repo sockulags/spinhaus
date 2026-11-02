@@ -55,6 +55,7 @@ object Routes {
     const val PLANS = "plans"
     const val PLAN = "plan/{id}"
     const val MY_PLAN = "myplan"
+    const val WORLD = "world"
 
     fun plan(id: String) = "plan/$id"
 
@@ -72,9 +73,12 @@ class Nav(val controller: NavHostController, val app: AppContainer) {
     fun home() = controller.navigate(Routes.HOME) { popUpTo(Routes.HOME) { inclusive = true }; launchSingleTop = true }
 
     /** Starts a ride and opens the ride screen. type: WORKOUT, FREE or TEST */
-    fun startRide(profile: ProfileEntity, mode: RideMode, title: String, type: String, planSlot: se.spinhaus.core.plan.PlanSlot? = null) {
+    fun startRide(
+        profile: ProfileEntity, mode: RideMode, title: String, type: String,
+        planSlot: se.spinhaus.core.plan.PlanSlot? = null, world: se.spinhaus.app.world.PreparedWorld? = null,
+    ) {
         app.scope.launch {
-            if (app.ride.start(profile, mode, title, type, planSlot) || app.ride.active) {
+            if (app.ride.start(profile, mode, title, type, planSlot, world) || app.ride.active) {
                 controller.navigate(Routes.RIDE) { launchSingleTop = true }
             }
         }
@@ -155,6 +159,7 @@ fun SpinhausNavHost(app: AppContainer) {
             composable(Routes.PLAN, arguments = listOf(navArgument("id") { type = NavType.StringType })) {
                 WithProfile(profile) { p -> se.spinhaus.app.ui.screens.PlanDetailScreen(app, nav, p, it.arguments?.getString("id") ?: "") }
             }
+            composable(Routes.WORLD) { WithProfile(profile) { p -> se.spinhaus.app.ui.screens.WorldSetupScreen(app, nav, p) } }
             composable(Routes.MY_PLAN) { WithProfile(profile) { p -> se.spinhaus.app.ui.screens.MyPlanScreen(app, nav, p) } }
         }
     }

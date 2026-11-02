@@ -34,6 +34,36 @@ jobs:
       - name: Core unit tests
         run: SPINHAUS_CORE_ONLY=1 ./gradlew :core:test --console=plain
 
+      - name: Rust toolchain for Android
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: world
+
+      - name: Build 3D world library (Rust → arm64)
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: |
+          cargo install cargo-ndk --locked --version 3.5.4 || cargo install cargo-ndk --locked
+          cd world
+          cargo ndk -t arm64-v8a --platform 31 -o ../app/src/main/jniLibs build --release --lib
+          ls -la ../app/src/main/jniLibs/arm64-v8a
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build 3D world renderer (three.js)
+        run: |
+          cd world-web
+          npm ci
+          npm run build
+          mkdir -p ../app/src/main/assets/world
+          cp -r dist/* ../app/src/main/assets/world/
+
       - name: Prepare signing key
         env:
           PW: ${{ secrets.SPINHAUS_KEYSTORE_PASSWORD }}

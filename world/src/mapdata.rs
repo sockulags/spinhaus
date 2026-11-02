@@ -1,0 +1,334 @@
+//! Fetches what OpenStreetMap knows about a route's surroundings and caches it,
+//! so each route is normally downloaded only once.
+//!
+//! Scenery — forests, water, roads, bridges and tunnels — comes from OpenStreetMap's own
+//! vector tiles, which are fast and dependable. Buildings have two sources, in
+//! order of preference:
+//! 1. The Overpass API — full detail (mapped heights, storeys, building types),
+//!    but served by volunteer-run machines that are often overloaded.
+//! 2. The same vector tiles — outlines only.
+
+use std::time::Duration;
+
+use futures::future::select_ok;
+use futures::stream::{self, StreamExt};
+use serde::{Deserialize, Serialize};
+use velopopuli_core::gpx::Route;
+use velopopuli_core::world::{
+    corridor_tiles, overpass_query, parse_boundaries, parse_overpass, parse_tile, parse_ways, route_corridor, way_query, Footprint, MapTile, MappedBoundary, MappedWay, RoadKind, Scenery, MAP_ZOOM,
+    WAY_TAGS,
+};
+
+use crate::now_ms;
+use crate::store::Store;
+
+/// Public Overpass servers. The first stretch of a route is asked of all of them at once and the
+/// first good answer wins; the rest of the route then goes to that server alone.
+const OVERPASS: [&str; 3] = ["https://overpass-api.de/api/interpreter", "https://overpass.openstreetmap.fr/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
+const VECTOR_TILES: &str = "https://vector.openstreetmap.org/shortbread_v1";
+/// Buildings are fetched this far to either side of the road.
+const RADIUS_M: f64 = 350.0;
+/// Forests and water are wanted further out: they are what the middle distance is made of.
+const SCENERY_RADIUS_M: f64 = 1000.0;
+/// Roads are kept out to about the same distance, and footpaths — of which a town has thousands —
+/// only where they can be made out. (The test used errs on the generous side, up to double.)
+const ROADS_RADIUS_M: f64 = 700.0;
+const PATHS_RADIUS_M: f64 = 250.0;
+const SPACING_M: f64 = 100.0;
+/// Road tags are wanted only for the road the route is on: a narrow strip, finely traced.
+const SURFACE_RADIUS_M: f64 = 15.0;
+const SURFACE_SPACING_M: f64 = 25.0;
+/// Long routes are asked for in stretches, keeping each request small enough for a public server.
+const STRETCH_M: f64 = 20_000.0;
+/// How long a ride start may wait on each source before giving up on it.
+const OVERPASS_FIRST_ANSWER: Duration = Duration::from_secs(12);
+const OVERPASS_BUDGET: Duration = Duration::from_secs(45);
+const TILE_BUDGET: Duration = Duration::from_secs(40);
+const MAX_TILES: usize = 500;
+const MAX_BUILDINGS: usize = 80_000;
+/// The map changes slowly; refresh a route's buildings twice a year. Outline-only
+/// data is retried sooner, in the hope of getting the detailed version next time.
+const MAX_AGE_MS: u64 = 180 * 86_400_000;
+const MAX_AGE_OUTLINES_MS: u64 = 14 * 86_400_000;
+const FORMAT: u32 = 2;
+const SCENERY_FORMAT: u32 = 4;
+
+#[derive(Serialize, Deserialize)]
+struct Cached {
+    format: u32,
+    fetched_at: u64,
+    /// False when the data came from vector tiles and so has estimated heights.
+    detailed: bool,
+    footprints: Vec<Footprint>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct CachedScenery {
+    format: u32,
+    fetched_at: u64,
+    scenery: Scenery,
+    /// When road tags were last asked for, so a down Overpass doesn't delay every ride.
+    #[serde(default)]
+    surfaces_tried_at: u64,
+}
+
+/// How long to wait before asking Overpass for a route's road tags again after it failed.
+const SURFACE_RETRY_MS: u64 = 86_400_000;
+
+/// What the map holds for a route. Either part is empty if it wasn't wanted or couldn't be had.
+#[derive(Default)]
+pub struct MapData {
+    pub footprints: Vec<Footprint>,
+    pub scenery: Option<Scenery>,
+}
+
+async fn overpass_text(http: &reqwest::Client, endpoint: &'static str, query: &str) -> Result<(String, &'static str), String> {
+    let res = http.post(endpoint).form(&[("data", query)]).send().await.map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("{endpoint} answered {}", res.status()));
+    }
+    Ok((res.text().await.map_err(|e| e.to_string())?, endpoint))
+}
+
+/// Asks every Overpass server at once and returns the first good answer, within `wait`.
+pub async fn overpass_first(http: &reqwest::Client, query: &str, wait: Duration) -> Result<String, String> {
+    let race = select_ok(OVERPASS.map(|endpoint| Box::pin(overpass_text(http, endpoint, query))));
+    let ((text, _), _) = tokio::time::timeout(wait, race)
+        .await
+        .map_err(|_| "No OpenStreetMap server answered in time; try again in a minute.".to_string())?
+        .map_err(|e| format!("The OpenStreetMap servers are busy ({e}); try again in a minute."))?;
+    Ok(text)
+}
+
+async fn overpass_request(http: &reqwest::Client, endpoint: &'static str, query: &str) -> Result<(Vec<Footprint>, &'static str), String> {
+    let (text, endpoint) = overpass_text(http, endpoint, query).await?;
+    Ok((parse_overpass(&text)?, endpoint))
+}
+
+/// The roads in an Overpass reply, and the hedges, walls and fences.
+type Ways = (Vec<MappedWay>, Vec<MappedBoundary>);
+
+async fn way_request(http: &reqwest::Client, endpoint: &'static str, query: &str) -> Result<(Ways, &'static str), String> {
+    let (text, endpoint) = overpass_text(http, endpoint, query).await?;
+    Ok(((parse_ways(&text)?, parse_boundaries(&text)?), endpoint))
+}
+
+/// The roads the route follows with their surface and width tags, from the Overpass API (the tiles don't carry
+/// them), and the field boundaries near it.
+async fn ways_from_overpass(http: &reqwest::Client, route: &Route) -> Result<Ways, String> {
+    if std::env::var_os("VP_SKIP_OVERPASS").is_some() {
+        return Err("skipped by VP_SKIP_OVERPASS".into());
+    }
+    let per_stretch = ((STRETCH_M / route.step) as usize).max(1);
+    let stretches: Vec<String> = (0..route.n).step_by(per_stretch).map(|from| way_query(route, from, (from + per_stretch).min(route.n), SURFACE_RADIUS_M, SURFACE_SPACING_M)).collect();
+    let race = select_ok(OVERPASS.map(|endpoint| Box::pin(way_request(http, endpoint, &stretches[0]))));
+    let ((mut all, server), _) = tokio::time::timeout(OVERPASS_FIRST_ANSWER, race).await.map_err(|_| "no Overpass server answered in time".to_string())??;
+    let rest = async {
+        for query in &stretches[1..] {
+            let (ways, boundaries) = way_request(http, server, query).await?.0;
+            all.0.extend(ways);
+            all.1.extend(boundaries);
+        }
+        Ok::<_, String>(all)
+    };
+    tokio::time::timeout(OVERPASS_BUDGET, rest).await.map_err(|_| "Overpass took too long".to_string())?
+}
+
+async fn from_overpass(http: &reqwest::Client, route: &Route) -> Result<Vec<Footprint>, String> {
+    // Diagnostic switch: go straight to the vector-tile source.
+    if std::env::var_os("VP_SKIP_OVERPASS").is_some() {
+        return Err("skipped by VP_SKIP_OVERPASS".into());
+    }
+    let per_stretch = ((STRETCH_M / route.step) as usize).max(1);
+    let stretches: Vec<String> = (0..route.n).step_by(per_stretch).map(|from| overpass_query(route, from, (from + per_stretch).min(route.n), RADIUS_M, SPACING_M)).collect();
+
+    let race = select_ok(OVERPASS.map(|endpoint| Box::pin(overpass_request(http, endpoint, &stretches[0]))));
+    let ((mut all, server), _) = tokio::time::timeout(OVERPASS_FIRST_ANSWER, race).await.map_err(|_| "no Overpass server answered in time".to_string())??;
+    let rest = async {
+        for query in &stretches[1..] {
+            all.extend(overpass_request(http, server, query).await?.0);
+        }
+        Ok::<_, String>(all)
+    };
+    let mut all = tokio::time::timeout(OVERPASS_BUDGET, rest).await.map_err(|_| "Overpass took too long".to_string())??;
+    // Neighbouring stretches overlap, so the same building can come back twice.
+    all.sort_by_key(|f| f.id);
+    all.dedup_by_key(|f| f.id);
+    Ok(all)
+}
+
+/// Downloads and decodes the vector tiles within `radius_m` of the route. All or nothing:
+/// a flaky connection must not leave a route with holes in it.
+async fn fetch_tiles(http: &reqwest::Client, route: &Route, radius_m: f64) -> Result<Vec<((u32, u32), MapTile)>, String> {
+    let mut tiles = corridor_tiles(route, radius_m);
+    // A very long route gets a narrower strip rather than nothing.
+    if tiles.len() > MAX_TILES && radius_m > RADIUS_M {
+        tiles = corridor_tiles(route, RADIUS_M);
+    }
+    if tiles.len() > MAX_TILES {
+        return Err(format!("route needs {} map tiles, more than is reasonable to download", tiles.len()));
+    }
+    let wanted = tiles.len();
+    let fetch = |(x, y): (u32, u32)| async move {
+        let res = http.get(format!("{VECTOR_TILES}/{MAP_ZOOM}/{x}/{y}.mvt")).send().await.ok()?;
+        // An empty stretch of sea or wilderness may legitimately have no tile.
+        if res.status() == reqwest::StatusCode::NOT_FOUND || res.status() == reqwest::StatusCode::NO_CONTENT {
+            return Some(((x, y), MapTile::default()));
+        }
+        if !res.status().is_success() {
+            return None;
+        }
+        Some(((x, y), parse_tile(&res.bytes().await.ok()?, MAP_ZOOM, x, y)?))
+    };
+    let results: Vec<Option<((u32, u32), MapTile)>> =
+        tokio::time::timeout(TILE_BUDGET, stream::iter(tiles).map(fetch).buffer_unordered(8).collect()).await.map_err(|_| "map tiles took too long".to_string())?;
+    let got: Vec<_> = results.into_iter().flatten().collect();
+    if got.len() < wanted {
+        return Err(format!("only {} of {wanted} map tiles arrived", got.len()));
+    }
+    Ok(got)
+}
+
+fn fresh<T>(cached: &Option<T>, fetched_at: impl Fn(&T) -> u64, max_age: impl Fn(&T) -> u64) -> bool {
+    cached.as_ref().is_some_and(|c| now_ms().saturating_sub(fetched_at(c)) < max_age(c))
+}
+
+/// Buildings and scenery for a route: from the cache where present and fresh, otherwise
+/// downloaded. Never fails — offline simply means none (or older ones).
+pub async fn load(http: &reqwest::Client, store: &Store, route_id: &str, route: &Route, want_buildings: bool, want_scenery: bool) -> MapData {
+    let (buildings_name, scenery_name) = (format!("buildings-{route_id}"), format!("scenery-{route_id}"));
+    let cached: Option<Cached> = if want_buildings { store.get(&buildings_name).filter(|c: &Cached| c.format == FORMAT) } else { None };
+    let cached_scenery: Option<CachedScenery> = if want_scenery { store.get(&scenery_name).filter(|c: &CachedScenery| c.format == SCENERY_FORMAT) } else { None };
+    let need_buildings = want_buildings && !fresh(&cached, |c| c.fetched_at, |c| if c.detailed { MAX_AGE_MS } else { MAX_AGE_OUTLINES_MS });
+    let need_scenery = want_scenery && !fresh(&cached_scenery, |c| c.fetched_at, |_| MAX_AGE_MS);
+    // Road tags come from Overpass, which is often down: asked again on later rides until it answers.
+    let need_surfaces = want_scenery && (need_scenery || cached_scenery.as_ref().is_some_and(|c| c.scenery.way_tags != WAY_TAGS && now_ms().saturating_sub(c.surfaces_tried_at) > SURFACE_RETRY_MS));
+    let surfaces_tried_at = if need_surfaces { now_ms() } else { cached_scenery.as_ref().map_or(0, |c| c.surfaces_tried_at) };
+    let cached_fetched_at = cached_scenery.as_ref().map_or(0, |c| c.fetched_at);
+
+    // The sources are different servers; ask them all at once.
+    let (overpass, tiles, surfaces) = tokio::join!(
+        async {
+            if need_buildings {
+                Some(from_overpass(http, route).await)
+            } else {
+                None
+            }
+        },
+        async {
+            if need_scenery {
+                Some(fetch_tiles(http, route, SCENERY_RADIUS_M).await)
+            } else {
+                None
+            }
+        },
+        async {
+            if need_surfaces {
+                Some(ways_from_overpass(http, route).await)
+            } else {
+                None
+            }
+        }
+    );
+
+    let mut tile_buildings: Option<Vec<Footprint>> = None;
+    let mut scenery = match tiles {
+        Some(Ok(mut tiles)) => {
+            let mut scenery = Scenery::default();
+            let mut footprints = Vec::new();
+            let (near_roads, near_paths) = (route_corridor(route, ROADS_RADIUS_M), route_corridor(route, PATHS_RADIUS_M));
+            for ((x, y), tile) in &mut tiles {
+                tile.roads.retain(|road| {
+                    let middle = road.line[road.line.len() / 2];
+                    if matches!(road.kind, RoadKind::Path | RoadKind::Footway) {
+                        near_paths(middle[0], middle[1])
+                    } else {
+                        near_roads(middle[0], middle[1])
+                    }
+                });
+                footprints.append(&mut tile.footprints);
+                scenery.add(*x, *y, tile);
+            }
+            tile_buildings = Some(footprints);
+            eprintln!(
+                "Scenery: {} areas, {} waterways, {} roads and paths, {} bridges and tunnels from {} map tiles",
+                scenery.areas.len(),
+                scenery.waterways.len(),
+                scenery.roads.len(),
+                scenery.crossings.len(),
+                scenery.tiles.len()
+            );
+            let entry = CachedScenery { format: SCENERY_FORMAT, fetched_at: now_ms(), scenery, surfaces_tried_at };
+            if let Err(e) = store.set(&scenery_name, &entry) {
+                crate::log("map", format!("caching scenery failed: {e}"));
+            }
+            Some(entry.scenery)
+        }
+        Some(Err(why)) => {
+            crate::log("map", format!("scenery unavailable: {why}"));
+            cached_scenery.map(|c| c.scenery)
+        }
+        None => cached_scenery.map(|c| c.scenery),
+    };
+    let fetched_at = if need_scenery { now_ms() } else { cached_fetched_at };
+    let save = |s: &Scenery| {
+        let entry = CachedScenery { format: SCENERY_FORMAT, fetched_at, scenery: s.clone(), surfaces_tried_at };
+        if let Err(e) = store.set(&scenery_name, &entry) {
+            crate::log("map", format!("caching scenery failed: {e}"));
+        }
+    };
+    match (surfaces, scenery.as_mut()) {
+        (Some(Ok((ways, boundaries))), Some(s)) => {
+            crate::log("map", format!("road tags: {} mapped ways along the route, {} hedges, walls and fences near it", ways.len(), boundaries.len()));
+            s.ways = ways;
+            s.boundaries = boundaries;
+            s.way_tags = WAY_TAGS;
+            save(s);
+        }
+        (Some(Err(why)), s) => {
+            crate::log("map", format!("road tags unavailable, guessing surface and width from road kinds: {why}"));
+            // Remember the attempt, so the next ride doesn't wait on Overpass again today.
+            if let (Some(s), false) = (s, need_scenery) {
+                save(s);
+            }
+        }
+        _ => {}
+    }
+
+    let footprints = match overpass {
+        None => cached.map(|c| c.footprints).unwrap_or_default(),
+        Some(result) => {
+            let fetched = match result {
+                Ok(found) => Ok((found, true)),
+                // Fall back on the tiles: the ones just fetched for scenery if there are any.
+                Err(overpass_error) => match tile_buildings {
+                    Some(found) => {
+                        let near = route_corridor(route, RADIUS_M);
+                        Ok((found.into_iter().filter(|f| f.ring.first().is_some_and(|p| near(p[0], p[1]))).collect(), false))
+                    }
+                    None => fetch_tiles(http, route, RADIUS_M)
+                        .await
+                        .map(|tiles| (tiles.into_iter().flat_map(|(_, t)| t.footprints).collect(), false))
+                        .map_err(|tile_error| format!("Overpass: {overpass_error}; vector tiles: {tile_error}")),
+                },
+            };
+            match fetched {
+                Ok((mut footprints, detailed)) => {
+                    footprints.truncate(MAX_BUILDINGS);
+                    eprintln!("Buildings: {} from {}", footprints.len(), if detailed { "the Overpass API" } else { "OpenStreetMap vector tiles (heights estimated)" });
+                    // Only a complete download is cached, so a flaky connection can't leave a route half-built.
+                    let entry = Cached { format: FORMAT, fetched_at: now_ms(), detailed, footprints };
+                    if let Err(e) = store.set(&buildings_name, &entry) {
+                        crate::log("map", format!("caching buildings failed: {e}"));
+                    }
+                    entry.footprints
+                }
+                Err(why) => {
+                    crate::log("map", format!("buildings unavailable: {why}"));
+                    cached.map(|c| c.footprints).unwrap_or_default()
+                }
+            }
+        }
+    };
+    MapData { footprints, scenery }
+}

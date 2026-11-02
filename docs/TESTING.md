@@ -97,3 +97,10 @@ exportera loggen: **Enheter → Logg → Exportera**.
 - [ ] Efter 10–15 min ligger pulsen nära målet; watten ändras lite i taget.
 - [ ] Ta av pulsbandet en stund → "Ingen puls – effekten hålls" och röstvarning.
 - [ ] Editor: ett jämnt block med "Målpuls 70 %" blir pulsstyrt.
+
+## 13. 3D-värld (prov)
+- [ ] Hem → 3D-värld → **Demo-slingan** (ingen nedladdning). Världen visas, cyklisten rör sig när du trampar.
+- [ ] Notera **fps** uppe till vänster vid Snabb / Balanserad / Snyggast.
+- [ ] **Alpe d'Huez** (kräver internet, första gången upp till en minut): berg, serpentiner, byn i början.
+- [ ] Motståndet ökar när vägen lutar; växla med styret; Kamera byter vy.
+- [ ] Säg: flyter det? Ser det bra ut? Blir plattan varm? Fungerar knapparna?

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Terrain
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -136,6 +137,11 @@ fun HomeScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
             item {
                 BigActionTile(t("Free ride", "Fri cykling"), t("Routes, gears and grade", "Rutter, växlar och lutning"), Icons.Filled.Landscape, SpinColors.powerZones[2]) {
                     nav.go(Routes.FREE)
+                }
+            }
+            if (app.world.available) item {
+                BigActionTile(t("3D world", "3D-värld"), t("Alpe d'Huez, Ventoux, your own GPX", "Alpe d'Huez, Ventoux, egen GPX"), Icons.Filled.Terrain, SpinColors.powerZones[4]) {
+                    nav.go(Routes.WORLD)
                 }
             }
             item {

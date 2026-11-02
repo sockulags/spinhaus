@@ -49,6 +49,8 @@ data class RideSession(
     val expanded: ExpandedWorkout?,
     /** Plan slot this ride was started for, if any. */
     val planSlot: se.spinhaus.core.plan.PlanSlot? = null,
+    /** Set when riding in the 3D world. */
+    val world: se.spinhaus.app.world.PreparedWorld? = null,
 )
 
 data class RideResult(
@@ -95,6 +97,7 @@ class RideController(
     suspend fun start(
         profile: ProfileEntity, mode: RideMode, title: String, type: String,
         planSlot: se.spinhaus.core.plan.PlanSlot? = null,
+        world: se.spinhaus.app.world.PreparedWorld? = null,
     ): Boolean = mutex.withLock {
         if (_session.value != null) return false
         val s = profile.settings
@@ -120,7 +123,7 @@ class RideController(
         engine = e
         savedSamples = 0
         trackers.clear()
-        _session.value = RideSession(profile, mode, title, type, id, workout?.let { ExpandedWorkout.of(it) }, planSlot)
+        _session.value = RideSession(profile, mode, title, type, id, workout?.let { ExpandedWorkout.of(it) }, planSlot, world)
         audio.ftp = profile.ftp
         audio.absolute = workout?.absolutePower == true
         audio.maxHr = profile.maxHr

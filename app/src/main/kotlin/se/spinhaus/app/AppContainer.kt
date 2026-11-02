@@ -42,6 +42,7 @@ class AppContainer(val context: Context) {
         ride.appVisibleProvider = { _appVisible.value }
     }
     val backup = BackupManager(context, db)
+    val world = se.spinhaus.app.world.WorldRepository(context, bleLog)
     val updates = se.spinhaus.app.update.UpdateManager(context, scope)
 
     private val prefs = context.getSharedPreferences("spinhaus", Context.MODE_PRIVATE)

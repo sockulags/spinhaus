@@ -145,7 +145,34 @@ fun RideScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
     val imperial = settings.units == Units.IMPERIAL
     val lang = LocalLanguage.current
 
-    Column(Modifier.fillMaxSize().background(SpinColors.Background).systemBarsPadding()) {
+    val worldData = s.world
+    if (worldData != null) {
+        var cameraTick by remember { mutableIntStateOf(0) }
+        Box(Modifier.fillMaxSize().background(SpinColors.Background)) {
+            WorldView(app, worldData, { app.ride.snapshot.value }, cameraTick, Modifier.fillMaxSize())
+            Column(Modifier.fillMaxSize().systemBarsPadding()) {
+                Box(Modifier.fillMaxWidth().height(6.dp).background(zoneColor))
+                TopStatus(sn, s.title, trainerStatus, ctrlStatus, hrStatus)
+                StepBanner(sn, s.profile.ftp, (s.mode as? RideMode.Structured)?.workout?.absolutePower == true, lang)
+                Row(Modifier.weight(1f).fillMaxWidth().padding(12.dp)) {
+                    WorldHud(sn, worldData.init.total, imperial)
+                }
+                if (showGraph) {
+                    val route = (s.mode as? RideMode.Free)?.route
+                    if (route != null) Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xCC0E1116)).padding(8.dp)) {
+                        ElevationChart(route, sn.distanceM, height = 70.dp)
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) {
+                        Controls(sn, false, onAction = { app.ride.action(it) }, onEnd = { confirmEnd = true }, onFilm = { filmOpen = true })
+                    }
+                    BigButton(t("Camera", "Kamera"), null) { cameraTick++ }
+                    Spacer(Modifier.width(12.dp))
+                }
+            }
+        }
+    } else Column(Modifier.fillMaxSize().background(SpinColors.Background).systemBarsPadding()) {
         // zone accent bar
         Box(Modifier.fillMaxWidth().height(6.dp).background(zoneColor))
         TopStatus(sn, s.title, trainerStatus, ctrlStatus, hrStatus)

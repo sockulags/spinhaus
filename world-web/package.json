@@ -1,0 +1,16 @@
+{
+  "name": "spinhaus-world-web",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/three": "0.186.0",
+    "three": "0.186.1",
+    "typescript": "5.9.3",
+    "vite": "7.3.7"
+  }
+}
