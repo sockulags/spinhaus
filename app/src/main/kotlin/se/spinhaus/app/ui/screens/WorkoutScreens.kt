@@ -580,7 +580,9 @@ private fun StepRow(s: Step, expanded: ExpandedWorkout, ftp: Int) {
         }
         StepKind.STEADY -> {
             val a = s.from ?: 0.0
-            "${expanded.toWatts(a, ftp)} W" + pct(a)
+            val hr = s.hrTarget
+            if (hr != null) "♥ " + t("${(hr * 100).roundToInt()} % of max HR", "${(hr * 100).roundToInt()} % av maxpuls")
+            else "${expanded.toWatts(a, ftp)} W" + pct(a)
         }
     }
     val repeatLabel = if (s.repeat != null && s.repeatCount != null) {
@@ -1001,8 +1003,14 @@ private fun SegmentCard(
             is Segment.Steady -> {
                 DurationFields(seg.durationS) { onChange(seg.copy(durationS = it)) }
                 FieldRow {
-                    PowerField(labelPower, seg.power, absolute, powerSuffix, Modifier.weight(1f)) { onChange(seg.copy(power = it)) }
+                    PowerField(if (seg.hrTarget != null) t("Start power", "Starteffekt") else labelPower, seg.power, absolute, powerSuffix, Modifier.weight(1f)) { onChange(seg.copy(power = it)) }
                     CadenceField(labelCadence, seg.cadence, Modifier.weight(1f)) { onChange(seg.copy(cadence = it)) }
+                }
+                FieldRow {
+                    IntField(
+                        t("Heart rate target (% of max, empty = power)", "Målpuls (% av max, tomt = watt)"),
+                        seg.hrTarget?.let { (it * 100).roundToInt() }, Modifier.weight(1f), suffix = "%", allowEmpty = true,
+                    ) { v -> if (v == null || v in 1..100) onChange(seg.copy(hrTarget = v?.let { it / 100.0 })) }
                 }
             }
             is Segment.Ramp -> {

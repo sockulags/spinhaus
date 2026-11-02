@@ -90,3 +90,10 @@ exportera loggen: **Enheter → Logg → Exportera**.
 - [ ] Höger power-up pausar/startar filmen. Sluta trampa → filmen pausas; trampa → fortsätter.
 - [ ] Rösten hörs vid intervallbyte och filmljudet sänks kort.
 - [ ] Växla/ändra intensitet med styret medan filmen visas.
+
+## 12. Puls-ERG och mindre app
+- [ ] Appen startar och allt fungerar som förut efter uppdateringen (den är nu krympt – säg till om något kraschar).
+- [ ] Pass → Pulsstyrda → "Puls zon 2 · 45" med pulsband på. Pulsrutan visar "mål 13x".
+- [ ] Efter 10–15 min ligger pulsen nära målet; watten ändras lite i taget.
+- [ ] Ta av pulsbandet en stund → "Ingen puls – effekten hålls" och röstvarning.
+- [ ] Editor: ett jämnt block med "Målpuls 70 %" blir pulsstyrt.

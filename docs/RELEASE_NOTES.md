@@ -1,3 +1,2 @@
-- Träningsplaner: fyra planer, nästa pass på hemskärmen, missade pass kan göras i efterhand.
-- Film under passet: 🎬 Film på åkskärmen, flytande ruta med siffror ovanpå Netflix/YouTube.
-- Höger power-up-knapp spelar/pausar filmen. Filmen pausas när passet pausas. Filmljudet sänks när rösten pratar.
+- Puls-ERG: nya pulsstyrda pass (Puls zon 2 · 45/60/90, Pulsstege). Trainern justerar motståndet så att pulsen ligger rätt. Målpuls går att sätta i passeditorn.
+- Mindre app: snabbare nedladdning vid uppdatering.

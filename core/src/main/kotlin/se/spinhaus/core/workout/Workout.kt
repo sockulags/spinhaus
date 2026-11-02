@@ -6,7 +6,7 @@ import kotlinx.serialization.json.Json
 
 @Serializable
 enum class WorkoutCategory {
-    RECOVERY, ENDURANCE, TEMPO, SWEET_SPOT, THRESHOLD, VO2MAX, ANAEROBIC, CADENCE, SHORT, FTP_TEST, CUSTOM
+    RECOVERY, ENDURANCE, TEMPO, SWEET_SPOT, THRESHOLD, VO2MAX, ANAEROBIC, CADENCE, SHORT, HEART_RATE, FTP_TEST, CUSTOM
 }
 
 @Serializable
@@ -32,6 +32,11 @@ sealed class Segment {
         val power: Double,
         val cadence: Int? = null,
         override val texts: List<TextEvent> = emptyList(),
+        /**
+         * Heart-rate target as a fraction of max HR. When set, the trainer power is adjusted to hold
+         * this heart rate and [power] is only the starting point.
+         */
+        val hrTarget: Double? = null,
     ) : Segment() {
         override fun durationS() = durationS
     }

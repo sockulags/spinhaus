@@ -203,6 +203,16 @@ fun RideScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
         }
     }
 
+    if (sn.hrMissing) {
+        Box(Modifier.fillMaxSize().padding(top = 150.dp), contentAlignment = Alignment.TopCenter) {
+            Text(
+                t("No heart rate – holding the power", "Ingen puls – effekten hålls"),
+                color = Color.Black, fontWeight = FontWeight.Bold,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(SpinColors.Warn).padding(horizontal = 14.dp, vertical = 6.dp),
+            )
+        }
+    }
+
     if (sn.ergProtecting) {
         Box(Modifier.fillMaxSize().padding(top = 70.dp), contentAlignment = Alignment.TopCenter) {
             Text(
@@ -314,7 +324,7 @@ private fun stepLabel(step: Step, ftp: Int, absolute: Boolean, lang: String): St
         StepKind.FREE -> tr(lang, "Free ride", "Fri cykling")
         StepKind.MAX -> tr(lang, "All out", "Max") + (w(step.from)?.let { " (≈$it W)" } ?: "")
         StepKind.RAMP -> "${w(step.from)} → ${w(step.to)} W"
-        StepKind.STEADY -> "${w(step.from)} W"
+        StepKind.STEADY -> if (step.hrTarget != null) "♥ " + tr(lang, "heart rate ${(step.hrTarget!! * 100).roundToInt()} % of max", "puls ${(step.hrTarget!! * 100).roundToInt()} % av max") else "${w(step.from)} W"
     }
     val rep = if (step.repeat != null && step.repeatCount != null) " · ${step.repeat}/${step.repeatCount}" else ""
     val cad = step.cadence?.let { " · $it rpm" } ?: ""
@@ -408,7 +418,12 @@ private fun tileContent(type: TileType, sn: RideSnapshot, profile: ProfileEntity
         TileType.POWER -> TileText(t("Power (1 s)", "Effekt (1 s)"), "${sn.powerW}", "W", white)
         TileType.TARGET -> TileText(t("Target", "Mål"), sn.targetW?.toString() ?: "–", if (sn.targetW != null) "W" else null, SpinColors.Primary)
         TileType.PERCENT_OF_TARGET -> TileText(t("% of target", "% av mål"), sn.targetW?.takeIf { it > 0 }?.let { "${sn.power3sW * 100 / it}" } ?: "–", "%", white)
-        TileType.HEART_RATE -> TileText(t("Heart rate", "Puls"), sn.hr?.toString() ?: "–", "bpm", sn.hrZone?.let { SpinColors.hrZone(it) } ?: white)
+        TileType.HEART_RATE -> TileText(
+            t("Heart rate", "Puls") + (sn.hrTargetBpm?.let { t(" · target $it", " · mål $it") } ?: ""),
+            sn.hr?.toString() ?: "–", "bpm",
+            sn.hrTargetBpm?.let { tgt -> val h = sn.hr; if (h == null) white else if (kotlin.math.abs(h - tgt) <= 3) SpinColors.Good else SpinColors.Warn }
+                ?: sn.hrZone?.let { SpinColors.hrZone(it) } ?: white,
+        )
         TileType.HR_ZONE -> TileText(t("HR zone", "Pulszon"), sn.hrZone?.let { "Z$it" } ?: "–", null, sn.hrZone?.let { SpinColors.hrZone(it) } ?: white)
         TileType.CADENCE -> {
             val target = sn.cadenceTarget

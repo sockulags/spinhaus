@@ -22,6 +22,7 @@ class AudioCues(private val context: Context) {
     var language = "sv"
     var ftp = 200
     var absolute = false
+    var maxHr = 185
 
     fun prepare(settings: SoundSettings, language: String) {
         this.settings = settings
@@ -118,7 +119,10 @@ class AudioCues(private val context: Context) {
                     StepKind.FREE -> tr(language, "Free ride, $dur", "Fri cykling, $dur")
                     StepKind.MAX -> tr(language, "All out, $dur", "Max, $dur")
                     StepKind.RAMP -> tr(language, "Ramp, $dur", "Ramp, $dur")
-                    StepKind.STEADY -> {
+                    StepKind.STEADY -> if (s.hrTarget != null) {
+                        val bpm = (s.hrTarget!! * maxHr).toInt()
+                        tr(language, "$dur at heart rate $bpm", "$dur på puls $bpm")
+                    } else {
                         val w = s.from?.let { if (absolute) it.toInt() else (it * ftp).toInt() }
                         tr(language, "$dur at $w watts", "$dur på $w watt")
                     }
@@ -133,6 +137,9 @@ class AudioCues(private val context: Context) {
             RideEvent.LowCadence -> if (enabled(SoundEvent.LOW_CADENCE)) say(tr(language, "Cadence up", "Öka kadensen"))
             is RideEvent.Text -> if (enabled(SoundEvent.TEXT_MESSAGES)) say(e.message)
             is RideEvent.Shifted -> if (enabled(SoundEvent.SHIFT_CLICK)) tone?.startTone(ToneGenerator.TONE_CDMA_PIP, 40)
+            RideEvent.HeartRateMissing -> if (enabled(SoundEvent.CONNECTION_LOST)) {
+                beep(true); say(tr(language, "No heart rate. Holding the power.", "Ingen puls. Effekten hålls."))
+            }
             RideEvent.GoalReached -> if (enabled(SoundEvent.WORKOUT_DONE)) say(tr(language, "Goal reached!", "Målet är nått!"))
             else -> {}
         }

@@ -18,6 +18,10 @@ class WorkoutBuilder {
         segments += Segment.Intervals(repeat, onS, onP, offS, offP, onCad, offCad, text?.let { listOf(TextEvent(0, it)) } ?: emptyList())
     }
     fun free(min: Double) { segments += Segment.Free(s(min)) }
+    /** Heart-rate controlled block: [hr] = fraction of max HR, [startPower] = starting point (FTP fraction). */
+    fun hr(min: Double, hr: Double, startPower: Double = 0.6, text: String? = null) {
+        segments += Segment.Steady(s(min), startPower, null, text?.let { listOf(TextEvent(0, it)) } ?: emptyList(), hrTarget = hr)
+    }
     fun max(sec: Int, guide: Double? = null) { segments += Segment.MaxEffort(sec, guide) }
 }
 
@@ -206,6 +210,29 @@ object WorkoutLibrary {
         workout("low-cadence", "Low Cadence Strength", "Styrka låg kadens", CADENCE,
             "Five 5-minute efforts at 60 rpm.", "Fem 5-minutersintervaller på 60 varv/min.") {
             warmup(); intervals(5, 300, 0.85, 180, 0.55, 60, 90); cooldown()
+        },
+        // --- Heart rate
+        workout("hr-z2-45", "Heart Rate Zone 2 · 45", "Puls zon 2 · 45", HEART_RATE,
+            "The trainer adjusts the resistance to hold 70 % of your max heart rate. Needs a heart-rate sensor.",
+            "Trainern justerar motståndet så att pulsen ligger på 70 % av maxpuls. Kräver pulsmätare.") {
+            warmup(5.0, 0.45, 0.60); hr(35.0, 0.70); cooldown(5.0, 0.55, 0.40)
+        },
+        workout("hr-z2-60", "Heart Rate Zone 2 · 60", "Puls zon 2 · 60", HEART_RATE,
+            "An hour at 70 % of max heart rate, power follows your heart. Needs a heart-rate sensor.",
+            "En timme på 70 % av maxpuls, effekten följer pulsen. Kräver pulsmätare.") {
+            warmup(5.0, 0.45, 0.60); hr(50.0, 0.70); cooldown(5.0, 0.55, 0.40)
+        },
+        workout("hr-z2-90", "Heart Rate Zone 2 · 90", "Puls zon 2 · 90", HEART_RATE,
+            "Long aerobic ride at 70 % of max heart rate. Needs a heart-rate sensor.",
+            "Långt distanspass på 70 % av maxpuls. Kräver pulsmätare.") {
+            warmup(5.0, 0.45, 0.60); hr(80.0, 0.70); cooldown(5.0, 0.55, 0.40)
+        },
+        workout("hr-ladder", "Heart Rate Ladder", "Pulsstege", HEART_RATE,
+            "Steps of 65, 72, 78 and 72 % of max heart rate, 10 minutes each. Needs a heart-rate sensor.",
+            "Steg på 65, 72, 78 och 72 % av maxpuls, 10 minuter vardera. Kräver pulsmätare.") {
+            warmup(5.0, 0.45, 0.60)
+            hr(10.0, 0.65); hr(10.0, 0.72, 0.65); hr(10.0, 0.78, 0.7); hr(10.0, 0.72, 0.65)
+            cooldown(5.0, 0.55, 0.40)
         },
         // --- Short
         workout("quick-20", "Quick 20", "Snabba 20", SHORT,

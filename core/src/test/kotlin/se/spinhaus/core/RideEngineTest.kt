@@ -202,3 +202,45 @@ class ErgRateLimitTest {
         assertTrue(sent in 5..12, "sent $sent commands in 10 s")
     }
 }
+
+class HeartRateErgTest {
+    /** Simple heart model: HR approaches 55 + 0.45·W with a 40 s lag. */
+    @Test
+    fun powerConvergesToHoldTargetHeartRate() {
+        val w = Workout("h", "h", segments = listOf(Segment.Steady(1800, 0.5, hrTarget = 0.70)))
+        val e = RideEngine(RideConfig(RideMode.Structured(w), ftp = 250, maxHr = 190))
+        var now = 0L
+        var hr = 90.0
+        var power = 125
+        repeat(1800 * 4) {
+            now += 250
+            hr += ((55 + 0.45 * power) - hr) * (0.25 / 40.0)
+            e.onPower(power, now); e.onCadence(90.0, now); e.onHeartRate(hr.toInt(), now)
+            e.tick(now)
+            (e.takeCommand() as? TrainerCommand.TargetPower)?.let { power = it.watts }
+        }
+        val snap = e.snapshot(now)
+        assertEquals(133, snap.hrTargetBpm)
+        assertTrue(kotlin.math.abs(hr - 133) < 4, "hr ${hr.toInt()} power $power")
+        assertTrue(power in 150..200, "power $power")
+    }
+
+    @Test
+    fun missingHeartRateHoldsPowerAndWarns() {
+        val w = Workout("h", "h", segments = listOf(Segment.Steady(600, 0.6, hrTarget = 0.70)))
+        val e = RideEngine(RideConfig(RideMode.Structured(w), ftp = 200, maxHr = 190))
+        var now = 0L
+        val events = ArrayList<RideEvent>()
+        val cmds = ArrayList<TrainerCommand>()
+        repeat(60 * 4) {
+            now += 250
+            e.onPower(120, now); e.onCadence(90.0, now)
+            e.tick(now)
+            e.takeCommand()?.let { cmds += it }
+            events += e.drainEvents()
+        }
+        assertTrue(events.any { it is RideEvent.HeartRateMissing })
+        assertTrue(e.snapshot(now).hrMissing)
+        assertEquals(TrainerCommand.TargetPower(120), cmds.last())
+    }
+}

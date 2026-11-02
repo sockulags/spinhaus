@@ -21,6 +21,8 @@ data class Step(
     val repeatCount: Int?,
     val isWork: Boolean,
     val texts: List<TextEvent>,
+    /** Heart-rate target (fraction of max HR) for heart-rate controlled steps. */
+    val hrTarget: Double? = null,
 ) {
     val endS get() = startS + durationS
     val ergControlled get() = kind == StepKind.STEADY || kind == StepKind.RAMP
@@ -67,15 +69,15 @@ class ExpandedWorkout(val workout: Workout, val steps: List<Step>) {
             var t = 0
             fun add(
                 d: Int, k: StepKind, from: Double?, to: Double?, cad: Int?, seg: Int,
-                rep: Int?, repCount: Int?, work: Boolean, texts: List<TextEvent>,
+                rep: Int?, repCount: Int?, work: Boolean, texts: List<TextEvent>, hr: Double? = null,
             ) {
                 if (d <= 0) return
-                steps.add(Step(steps.size, t, d, k, from, to, cad, seg, rep, repCount, work, texts))
+                steps.add(Step(steps.size, t, d, k, from, to, cad, seg, rep, repCount, work, texts, hr))
                 t += d
             }
             workout.segments.forEachIndexed { i, s ->
                 when (s) {
-                    is Segment.Steady -> add(s.durationS, StepKind.STEADY, s.power, s.power, s.cadence, i, null, null, s.power >= 0.88, s.texts)
+                    is Segment.Steady -> add(s.durationS, StepKind.STEADY, s.power, s.power, s.cadence, i, null, null, s.power >= 0.88, s.texts, s.hrTarget)
                     is Segment.Ramp -> add(s.durationS, StepKind.RAMP, s.from, s.to, s.cadence, i, null, null, false, s.texts)
                     is Segment.Free -> add(s.durationS, StepKind.FREE, null, null, s.cadence, i, null, null, false, s.texts)
                     is Segment.MaxEffort -> add(s.durationS, StepKind.MAX, s.guide, s.guide, null, i, null, null, true, s.texts)

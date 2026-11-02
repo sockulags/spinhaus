@@ -54,6 +54,7 @@ sealed class RideEvent {
     data object Paused : RideEvent()
     data object Resumed : RideEvent()
     data object GoalReached : RideEvent()
+    data object HeartRateMissing : RideEvent()
     data class UiAction(val action: ControlAction) : RideEvent()
 }
 
@@ -99,6 +100,10 @@ data class RideSnapshot(
     val textMessage: String?,
     val cadenceTarget: Int?,
     val routeProgress: Double?,
+    /** Heart-rate target of the current step (heart-rate ERG), in bpm. */
+    val hrTargetBpm: Int? = null,
+    /** True when a heart-rate step runs without heart-rate data. */
+    val hrMissing: Boolean = false,
 )
 
 /**
@@ -111,6 +116,12 @@ class RideEngine(val config: RideConfig) {
     private val route: Route? = (config.mode as? RideMode.Free)?.route
     val gearbox = VirtualGearbox(config.gears)
     private val erg = ErgController()
+    private val hrCtrl = HrController(
+        minW = (config.ftp * 0.3).roundToInt().coerceAtLeast(config.powerRange.first),
+        maxW = (config.ftp * 1.2).roundToInt().coerceAtMost(config.powerRange.last),
+    )
+    private var hrMissingFor = 0.0
+    private var hrMissingWarned = false
 
     // --- sensor inputs
     private var power = 0
@@ -331,6 +342,7 @@ class RideEngine(val config: RideConfig) {
 
         updateWorkoutStep()
         checkLowCadence(cad, dt)
+        updateHeartRateControl(nowMs, dt)
         checkRampTest(cad, dt)
         checkGoal()
         if (textMessage != null && rideTime > textUntil) textMessage = null
@@ -362,6 +374,12 @@ class RideEngine(val config: RideConfig) {
             return
         }
         if (s.index != currentStepIndex) {
+            val prevWasHr = workout.steps.getOrNull(currentStepIndex)?.hrTarget != null
+            if (s.hrTarget != null) {
+                hrCtrl.start(workout.toWatts(s.from ?: 0.6, config.ftp), keepCurrent = prevWasHr)
+                hrMissingFor = 0.0
+                hrMissingWarned = false
+            }
             currentStepIndex = s.index
             lowCadFor = 0.0
             lowCadWarned = false
@@ -435,9 +453,27 @@ class RideEngine(val config: RideConfig) {
         return ergEnabled && s.ergControlled
     }
 
+    /** Target heart rate in bpm; intensity +5 % adds 3 bpm. */
+    private fun hrTargetBpm(): Int? {
+        val f = currentStep()?.hrTarget ?: return null
+        return (f * config.maxHr + intensity * 60).roundToInt()
+    }
+
+    private fun updateHeartRateControl(nowMs: Long, dt: Double) {
+        val target = hrTargetBpm() ?: return
+        val h = currentHr(nowMs)
+        hrCtrl.update(target, h, dt)
+        if (h == null) hrMissingFor += dt else hrMissingFor = 0.0
+        if (hrMissingFor >= 10 && !hrMissingWarned) {
+            hrMissingWarned = true
+            events += RideEvent.HeartRateMissing
+        }
+    }
+
     private fun workoutTargetW(): Int? {
         val ew = workout ?: return null
         val s = currentStep() ?: return null
+        if (s.hrTarget != null) return hrCtrl.powerW.roundToInt()
         val v = s.targetAt(workoutTime - s.startS) ?: return null
         val base = ew.toWatts(v, config.ftp)
         return (base * (1 + intensity)).roundToInt()
@@ -552,6 +588,8 @@ class RideEngine(val config: RideConfig) {
             textMessage = textMessage,
             cadenceTarget = step?.cadence,
             routeProgress = route?.let { if (it.loop) (distance % it.lengthM) / it.lengthM else (distance / it.lengthM).coerceAtMost(1.0) },
+            hrTargetBpm = hrTargetBpm(),
+            hrMissing = hrTargetBpm() != null && hrCtrl.hrMissing,
         )
     }
 

@@ -123,6 +123,7 @@ class RideController(
         _session.value = RideSession(profile, mode, title, type, id, workout?.let { ExpandedWorkout.of(it) }, planSlot)
         audio.ftp = profile.ftp
         audio.absolute = workout?.absolutePower == true
+        audio.maxHr = profile.maxHr
         audio.prepare(s.sound, profile.language)
         RideService.start(context)
         if (senderJob?.isActive != true) senderJob = scope.launch { senderLoop() }

@@ -26,6 +26,7 @@ fun categoryName(c: WorkoutCategory, lang: String): String = when (c) {
     WorkoutCategory.ANAEROBIC -> tr(lang, "Anaerobic", "Anaerob")
     WorkoutCategory.CADENCE -> tr(lang, "Cadence", "Kadens")
     WorkoutCategory.SHORT -> tr(lang, "Short", "Korta")
+    WorkoutCategory.HEART_RATE -> tr(lang, "Heart rate", "Pulsstyrda")
     WorkoutCategory.FTP_TEST -> tr(lang, "FTP tests", "FTP-tester")
     WorkoutCategory.CUSTOM -> tr(lang, "My workouts", "Mina pass")
 }
