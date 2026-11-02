@@ -74,6 +74,7 @@ class RideController(
     private var savedSamples = 0
     private val trackers = HashMap<String, ButtonEdgeTracker>()
     private val interpreter = ControlInterpreter()
+    private val lastPress = HashMap<RideButton, Pair<String, Long>>()
 
     private val _session = MutableStateFlow<RideSession?>(null)
     val session: StateFlow<RideSession?> = _session
@@ -235,7 +236,14 @@ class RideController(
             if (engine !== e) return@collect
             val now = System.currentTimeMillis()
             val tracker = trackers.getOrPut(address) { ButtonEdgeTracker() }
-            val edges = tracker.update(pressed, now)
+            // Both Ride halves may report the same physical press; keep the first one.
+            val edges = tracker.update(pressed, now).filter { edge ->
+                if (edge !is ButtonEdgeTracker.Edge.Pressed) return@filter true
+                val prev = lastPress[edge.button]
+                val dup = prev != null && prev.first != address && now - prev.second < 250
+                if (!dup) lastPress[edge.button] = address to now
+                !dup
+            }
             if (edges.isEmpty()) return@collect
             val ergActive = e.snapshot(now).ergActive
             for (a in interpreter.onEdges(edges) { b -> bindingFor(b, ergActive) }) e.onAction(a)

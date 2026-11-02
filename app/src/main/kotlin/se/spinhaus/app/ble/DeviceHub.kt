@@ -114,15 +114,14 @@ class DeviceHub(
     /**
      * The Zwift Ride advertises two devices. Only the LEFT half reports the buttons of both sides
      * (community finding, BikeControl); the right half only reports its own. So whenever a Ride left
-     * half shows up that we're not connected to, use it and drop the other Ride controllers.
+     * half shows up that we're not connected to, add it too. The right half is kept (it may be the
+     * only one that works if the left half is locked by Zwift); duplicate presses are filtered.
      */
     private fun preferRideLeft(results: Map<String, ScannedDevice>) {
+        if (_controllers.value.isEmpty()) return
         val left = results.values.firstOrNull { it.detail == "RIDE_LEFT" } ?: return
         if (_controllers.value.any { it.address == left.address }) return
-        val others = _controllers.value.filter { controllerTypes[it.address] != "RIDE_LEFT" }
-        log.log("hub", "Zwift Ride left half found (${left.address}) – using it for all buttons" +
-            if (others.isNotEmpty()) ", replacing ${others.joinToString { it.address }}" else "")
-        others.forEach { forgetController(it.address) }
+        log.log("hub", "Zwift Ride left half found (${left.address}) – adding it")
         connectController(left.address, left.name, type = "RIDE_LEFT")
     }
 
@@ -133,14 +132,6 @@ class DeviceHub(
     fun connectController(address: String, name: String?, remember: Boolean = true, type: String? = null) {
         val t = type ?: scanner.results.value[address]?.detail
         if (t != null) controllerTypes[address] = t
-        if (t == "RIDE_RIGHT") {
-            val left = scanner.results.value.values.firstOrNull { it.detail == "RIDE_LEFT" }
-            if (left != null) {
-                log.log("hub", "picked Ride right half – connecting the left half instead")
-                connectController(left.address, left.name, remember, "RIDE_LEFT")
-                return
-            }
-        }
         if (_controllers.value.any { it.address == address }) return
         val dev = scanner.remoteDevice(address) ?: return
         val c = ControllerConnection(context, dev, log, scope)
