@@ -102,16 +102,6 @@ data class ProfileSettings(
     val showGraph: Boolean = true,
     val activePlan: se.spinhaus.core.plan.ActivePlan? = null,
     val film: FilmSettings = FilmSettings(),
-)
-
-@Serializable
-data class FilmSettings(
-    /** Show the floating stats box when Spinhaus is in the background during a ride. */
-    val overlay: Boolean = true,
-    val opacity: Float = 0.85f,
-    val expanded: Boolean = false,
-    /** Pause/resume the film when the ride pauses/resumes. */
-    val pauseWithRide: Boolean = true,
 ) {
     companion object {
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
@@ -123,6 +113,16 @@ data class FilmSettings(
         fun encode(p: ProfileSettings): String = json.encodeToString(serializer(), p)
     }
 }
+
+@Serializable
+data class FilmSettings(
+    /** Show the floating stats box when Spinhaus is in the background during a ride. */
+    val overlay: Boolean = true,
+    val opacity: Float = 0.85f,
+    val expanded: Boolean = false,
+    /** Pause/resume the film when the ride pauses/resumes. */
+    val pauseWithRide: Boolean = true,
+)
 
 val ProfileEntity.settings: ProfileSettings get() = ProfileSettings.decode(settingsJson)
 fun ProfileEntity.withSettings(s: ProfileSettings) = copy(settingsJson = ProfileSettings.encode(s))
