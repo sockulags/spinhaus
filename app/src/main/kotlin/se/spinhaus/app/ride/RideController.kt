@@ -251,7 +251,8 @@ class RideController(
                 lastSave = now
                 persistSamples(e)
             }
-            delay(250)
+            // Finer steps in the 3D world so the rider moves smoothly.
+            delay(if (_session.value?.world != null) 100L else 250L)
         }
     }
 

@@ -7,6 +7,7 @@ import { World } from './vp/world/scene'
 import { look, timeFromHour } from './vp/world/weather'
 import type { TimeOfDay, Weather } from './vp/types'
 import { api, errorText } from './vp/bridge'
+import { RiderSmoother } from './smooth'
 
 interface AppState {
   distance: number
@@ -79,6 +80,7 @@ async function start(): Promise<void> {
   window.SpinhausAndroid?.ready(JSON.stringify({ total: init.total }))
 
   let last = performance.now()
+  const smoother = new RiderSmoother()
   const recent: number[] = []
   let lastStats = performance.now()
   let failed = false
@@ -87,9 +89,9 @@ async function start(): Promise<void> {
     const dt = Math.min(0.1, (now - last) / 1000)
     last = now
     const s = latest?.s ?? { distance: 0, speed: 0, cadence: 0, moving: false }
-    const ahead = latest && s.moving ? Math.min(0.3, (now - latest.at) / 1000) : 0
+    const shown = Math.min(route.total, Math.max(0, smoother.update(now, dt, s.distance, s.speed, s.moving, latest?.at ?? now)))
     try {
-      w.frame(dt, { distance: Math.min(route.total, s.distance + s.speed * ahead), speed: s.speed, cadence: s.cadence, rivals: [] })
+      w.frame(dt, { distance: shown, speed: s.speed, cadence: s.cadence, rivals: [] })
     } catch (err) {
       if (!failed) void api.log(`frame failed: ${errorText(err)}`)
       failed = true
