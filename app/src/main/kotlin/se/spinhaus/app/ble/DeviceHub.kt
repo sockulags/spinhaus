@@ -108,7 +108,39 @@ class DeviceHub(
         scope.launch { devices.forgetType("TRAINER") }
     }
 
-    fun connectController(address: String, name: String?, remember: Boolean = true) {
+    /** Zwift controller type per address (from adverts), e.g. "RIDE_LEFT". */
+    private val controllerTypes = HashMap<String, String>()
+
+    /**
+     * The Zwift Ride advertises two devices. Only the LEFT half reports the buttons of both sides
+     * (community finding, BikeControl); the right half only reports its own. So whenever a Ride left
+     * half shows up that we're not connected to, use it and drop the other Ride controllers.
+     */
+    private fun preferRideLeft(results: Map<String, ScannedDevice>) {
+        val left = results.values.firstOrNull { it.detail == "RIDE_LEFT" } ?: return
+        if (_controllers.value.any { it.address == left.address }) return
+        val others = _controllers.value.filter { controllerTypes[it.address] != "RIDE_LEFT" }
+        log.log("hub", "Zwift Ride left half found (${left.address}) – using it for all buttons" +
+            if (others.isNotEmpty()) ", replacing ${others.joinToString { it.address }}" else "")
+        others.forEach { forgetController(it.address) }
+        connectController(left.address, left.name, type = "RIDE_LEFT")
+    }
+
+    init {
+        scope.launch { scanner.results.collect { preferRideLeft(it) } }
+    }
+
+    fun connectController(address: String, name: String?, remember: Boolean = true, type: String? = null) {
+        val t = type ?: scanner.results.value[address]?.detail
+        if (t != null) controllerTypes[address] = t
+        if (t == "RIDE_RIGHT") {
+            val left = scanner.results.value.values.firstOrNull { it.detail == "RIDE_LEFT" }
+            if (left != null) {
+                log.log("hub", "picked Ride right half – connecting the left half instead")
+                connectController(left.address, left.name, remember, "RIDE_LEFT")
+                return
+            }
+        }
         if (_controllers.value.any { it.address == address }) return
         val dev = scanner.remoteDevice(address) ?: return
         val c = ControllerConnection(context, dev, log, scope)

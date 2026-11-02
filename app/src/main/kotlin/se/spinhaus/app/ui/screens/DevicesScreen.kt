@@ -149,7 +149,12 @@ fun DevicesScreen(app: AppContainer, nav: Nav, profile: ProfileEntity) {
                 Text(t("No controllers paired. Press any button on the handlebar to wake them.", "Inga styrknappar parade. Tryck på valfri knapp på styret för att väcka dem."), color = SpinColors.Muted)
             }
             for (c in controllers) ControllerCard(c) { hub.forgetController(c.address) }
-            FoundList(found.filter { it.kind == DeviceKind.CONTROLLER && it.address !in connectedAddresses }, t("Add", "Lägg till")) {
+            Text(
+                t("The Zwift Ride shows up as two devices. Spinhaus automatically uses the left half, which sends the buttons of both sides.",
+                    "Zwift Ride syns som två enheter. Spinhaus använder automatiskt vänster del, som skickar knapparna från båda sidor."),
+                color = SpinColors.Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 4.dp),
+            )
+            FoundList(found.filter { it.kind == DeviceKind.CONTROLLER && it.address !in connectedAddresses }.sortedBy { if (it.detail == "RIDE_LEFT") 0 else 1 }, t("Add", "Lägg till")) {
                 hub.connectController(it.address, it.name)
             }
 
@@ -272,7 +277,13 @@ private fun FoundList(devices: List<ScannedDevice>, actionLabel: String, onPick:
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(d.name ?: d.address, style = MaterialTheme.typography.bodyLarge)
-                Text("${d.address} · ${d.rssi} dBm" + (d.detail?.let { " · $it" } ?: ""), color = SpinColors.Muted, style = MaterialTheme.typography.bodySmall)
+                val side = when (d.detail) {
+                    "RIDE_LEFT" -> " · " + t("left half – all buttons", "vänster del – alla knappar")
+                    "RIDE_RIGHT" -> " · " + t("right half – right buttons only", "höger del – bara högra knapparna")
+                    null -> ""
+                    else -> " · ${d.detail}"
+                }
+                Text("${d.address} · ${d.rssi} dBm$side", color = SpinColors.Muted, style = MaterialTheme.typography.bodySmall)
             }
             Button(onClick = { onPick(d) }) { Text(actionLabel) }
         }
